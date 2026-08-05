@@ -13,9 +13,10 @@ anro_ktranslate_install_method: "package_url"
 
 # Enterprise recommendation: mirror the desired .deb to an internal artifact repo.
 # Example:
-# anro_ktranslate_package_url: "https://repo.example.net/ktranslate_2.2.37_amd64.deb"
-anro_ktranslate_package_url: ""
-anro_ktranslate_package_checksum: ""
+# anro_ktranslate_package_url: "https://github.com/kentik/ktranslate/releases/download/v2.2.37/ktranslate_v2.2.37-1_amd64.deb--ubuntu-noble"
+anro_ktranslate_package_url: "{{ __anro_ktranslate_package_url | default("") }}"
+anro_ktranslate_package_checksum: "{{ __anro_ktranslate_package_checksum | default("") }}"
+anro_ktranslate_package_validate: true
 
 anro_ktranslate_user: "ktranslate"
 anro_ktranslate_group: "ktranslate"

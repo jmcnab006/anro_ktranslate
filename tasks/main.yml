@@ -1,4 +1,12 @@
 ---
+- name: MAIN | Load distribution specific variables
+  ansible.builtin.include_vars:
+    file: "{{ ansible_distribution | lower | replace(' ', '-') }}-{{ ansible_distribution_major_version }}.yaml"
+- name: MAIN | Populate service facts
+  ansible.builtin.service_facts:
+- name: MAIN | Build package list
+  ansible.builtin.package_facts:
+
 - name: Validate role variables
   ansible.builtin.assert:
     that:
