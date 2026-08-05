@@ -1,0 +1,37 @@
+---
+- name: Validate rendered SNMP YAML
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pathlib, yaml
+        p = pathlib.Path("{{ anro_ktranslate_snmp_config_path }}")
+        data = yaml.safe_load(p.read_text())
+        assert isinstance(data, dict)
+        assert "global" in data
+        assert "devices" in data
+  changed_when: false
+  become: true
+
+- name: Wait for ktranslate Prometheus endpoint
+  ansible.builtin.uri:
+    url: >-
+      http://{{ anro_ktranslate_validate_host }}:
+      {{- anro_ktranslate_validate_port -}}
+      {{- anro_ktranslate_validate_path }}
+    method: GET
+    return_content: true
+    status_code: 200
+  register: anro_ktranslate_endpoint
+  retries: "{{ anro_ktranslate_validate_retries }}"
+  delay: "{{ anro_ktranslate_validate_delay }}"
+  until: anro_ktranslate_endpoint.status == 200
+
+- name: Verify Prometheus endpoint contains metric text
+  ansible.builtin.assert:
+    that:
+      - "'# HELP' in anro_ktranslate_endpoint.content or '# TYPE' in anro_ktranslate_endpoint.content"
+    fail_msg: >-
+      ktranslate answered HTTP 200, but the response did not look like a
+      Prometheus exposition endpoint.

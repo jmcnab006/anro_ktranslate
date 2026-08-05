@@ -1,0 +1,45 @@
+# Managed by Ansible role anro_ktranslate.
+[Unit]
+Description=KTranslate SNMP collector
+Documentation=https://github.com/kentik/ktranslate
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User={{ anro_ktranslate_user }}
+Group={{ anro_ktranslate_group }}
+WorkingDirectory={{ anro_ktranslate_config_dir }}
+EnvironmentFile=-{{ anro_ktranslate_environment_path }}
+
+ExecStart={{ anro_ktranslate_binary_path }} \
+  -listen off \
+  -snmp {{ anro_ktranslate_snmp_config_path }} \
+{% if anro_ktranslate_prometheus_sink_enabled | bool %}
+  -sinks prometheus \
+  -format prometheus \
+  -prom_listen {{ anro_ktranslate_prometheus_listen }} \
+{% endif %}
+  -service_name {{ anro_ktranslate_service_name }} \
+  -log_level {{ anro_ktranslate_log_level }} \
+  $KT_FLAGS
+
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths={{ anro_ktranslate_config_dir }}
+{% if anro_ktranslate_enable_net_raw | bool %}
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+{% else %}
+CapabilityBoundingSet=
+{% endif %}
+
+[Install]
+WantedBy=multi-user.target

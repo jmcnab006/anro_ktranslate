@@ -1,0 +1,61 @@
+---
+- name: Install required operating-system packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - libpcap0.8
+      - python3
+    state: present
+    update_cache: true
+  become: true
+
+- name: Create ktranslate group
+  ansible.builtin.group:
+    name: "{{ anro_ktranslate_group }}"
+    system: true
+    state: present
+  become: true
+
+- name: Create ktranslate user
+  ansible.builtin.user:
+    name: "{{ anro_ktranslate_user }}"
+    group: "{{ anro_ktranslate_group }}"
+    home: "{{ anro_ktranslate_config_dir }}"
+    create_home: false
+    shell: /usr/sbin/nologin
+    system: true
+    state: present
+  become: true
+
+- name: Download ktranslate Debian package
+  ansible.builtin.get_url:
+    url: "{{ anro_ktranslate_package_url }}"
+    dest: "/var/tmp/ktranslate-{{ anro_ktranslate_version }}.deb"
+    checksum: "{{ anro_ktranslate_package_checksum | default(omit, true) }}"
+    mode: "0644"
+  when: anro_ktranslate_install_method == 'package_url'
+  become: true
+  register: anro_ktranslate_package_download
+
+- name: Install ktranslate Debian package
+  ansible.builtin.apt:
+    deb: "/var/tmp/ktranslate-{{ anro_ktranslate_version }}.deb"
+    state: present
+  when: anro_ktranslate_install_method == 'package_url'
+  become: true
+
+- name: Verify ktranslate binary exists
+  ansible.builtin.stat:
+    path: "{{ anro_ktranslate_binary_path }}"
+  register: anro_ktranslate_binary_stat
+  become: true
+
+- name: Fail when ktranslate binary is missing
+  ansible.builtin.assert:
+    that:
+      - anro_ktranslate_binary_stat.stat.exists
+      - anro_ktranslate_binary_stat.stat.executable
+    fail_msg: >-
+      ktranslate was not found at {{ anro_ktranslate_binary_path }}.
+      Verify the package contents or use install_method=preinstalled with
+      the correct binary path.

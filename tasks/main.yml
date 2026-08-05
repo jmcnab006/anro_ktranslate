@@ -1,0 +1,29 @@
+---
+- name: Validate role variables
+  ansible.builtin.assert:
+    that:
+      - anro_ktranslate_install_method in ['package_url', 'preinstalled']
+      - anro_ktranslate_prometheus_listen | length > 0
+      - anro_ktranslate_snmp_config is mapping
+      - >
+        anro_ktranslate_install_method != 'package_url'
+        or anro_ktranslate_package_url | length > 0
+    fail_msg: >-
+      Invalid anro_ktranslate configuration. For package_url installation,
+      set anro_ktranslate_package_url to an upstream or internally mirrored
+      Debian package.
+  when: anro_ktranslate_enabled | bool
+
+- name: Install ktranslate
+  ansible.builtin.include_tasks: install.yml
+  when: anro_ktranslate_enabled | bool
+
+- name: Configure ktranslate
+  ansible.builtin.include_tasks: configure.yml
+  when: anro_ktranslate_enabled | bool
+
+- name: Validate ktranslate
+  ansible.builtin.include_tasks: validate.yml
+  when:
+    - anro_ktranslate_enabled | bool
+    - anro_ktranslate_validate_endpoint | bool
