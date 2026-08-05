@@ -1,0 +1,81 @@
+---
+- name: Verify default scenario
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read service state
+      ansible.builtin.command: systemctl is-active ktranslate
+      register: service_state
+      changed_when: false
+      failed_when: service_state.stdout != 'active'
+
+    - name: Read service enablement
+      ansible.builtin.command: systemctl is-enabled ktranslate
+      register: service_enabled
+      changed_when: false
+      failed_when: service_enabled.stdout != 'enabled'
+
+    - name: Stat rendered files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/ktranslate/snmp.yaml
+        - /etc/default/ktranslate
+        - /etc/systemd/system/ktranslate.service
+      register: rendered_files
+
+    - name: Assert rendered files exist with restrictive modes
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.mode in ['0640', '0644']
+      loop: "{{ rendered_files.results }}"
+
+    - name: Load rendered SNMP configuration
+      ansible.builtin.slurp:
+        src: /etc/ktranslate/snmp.yaml
+      register: snmp_config_raw
+
+    - name: Parse rendered SNMP configuration
+      ansible.builtin.set_fact:
+        snmp_config: "{{ snmp_config_raw.content | b64decode | from_yaml }}"
+
+    - name: Assert representative SNMP settings
+      ansible.builtin.assert:
+        that:
+          - snmp_config.devices['test-router'].device_ip == '192.0.2.10'
+          - snmp_config.discovery.threads == 2
+          - snmp_config.global.poll_time_sec == 30
+          - snmp_config.global.mibs_enabled == ['IF-MIB']
+
+    - name: Request Prometheus endpoint
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8082/metrics
+        return_content: true
+        status_code: 200
+      register: metrics
+
+    - name: Assert Prometheus output
+      ansible.builtin.assert:
+        that:
+          - "'# HELP ktranslate_mock_up' in metrics.content"
+          - "'ktranslate_mock_up 1' in metrics.content"
+
+    - name: Read systemd unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/ktranslate.service
+      register: unit_raw
+
+    - name: Assert systemd hardening and expected flags
+      ansible.builtin.assert:
+        that:
+          - "'NoNewPrivileges=true' in (unit_raw.content | b64decode)"
+          - "'ProtectSystem=strict' in (unit_raw.content | b64decode)"
+          - "'-prom_listen 0.0.0.0:8082' in (unit_raw.content | b64decode)"
+          - "'-snmp /etc/ktranslate/snmp.yaml' in (unit_raw.content | b64decode)"
+
+    - name: Confirm role user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: ktranslate

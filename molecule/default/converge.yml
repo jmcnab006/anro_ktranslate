@@ -1,0 +1,6 @@
+---
+- name: Converge
+  hosts: ktranslate_collectors
+  become: true
+  roles:
+    - role: anro_ktranslate

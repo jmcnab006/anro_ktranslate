@@ -1,0 +1,22 @@
+---
+- name: Prepare test hosts
+  hosts: all
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Install test prerequisites
+      ansible.builtin.apt:
+        name:
+          - python3
+          - python3-yaml
+          - curl
+        state: present
+        update_cache: true
+
+    - name: Install mock ktranslate binary
+      ansible.builtin.copy:
+        src: ../shared/mock_ktranslate.py
+        dest: /usr/bin/ktranslate
+        owner: root
+        group: root
+        mode: "0755"

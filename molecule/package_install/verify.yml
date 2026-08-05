@@ -1,0 +1,37 @@
+---
+- name: Verify package installation scenario
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Query installed mock package
+      ansible.builtin.command: dpkg-query -W -f=${Status} ktranslate-mock
+      register: package_status
+      changed_when: false
+
+    - name: Assert package is installed
+      ansible.builtin.assert:
+        that:
+          - package_status.stdout == 'install ok installed'
+
+    - name: Verify binary
+      ansible.builtin.command: test -x /usr/bin/ktranslate
+      changed_when: false
+
+    - name: Verify service
+      ansible.builtin.command: systemctl is-active ktranslate
+      register: service_state
+      changed_when: false
+      failed_when: service_state.stdout != 'active'
+
+    - name: Verify endpoint
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8082/metrics
+        status_code: 200
+        return_content: true
+      register: metrics
+
+    - name: Assert endpoint body
+      ansible.builtin.assert:
+        that:
+          - "'ktranslate_mock_up 1' in metrics.content"
