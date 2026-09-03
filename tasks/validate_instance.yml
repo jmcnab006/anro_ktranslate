@@ -29,6 +29,21 @@
       Invalid {{ anro_ktranslate_validation_service_type }} instance definition:
       {{ anro_ktranslate_raw_instance }}
 
+- name: Validate host networking configuration for {{ anro_ktranslate_current_service_name }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        (anro_ktranslate_current_instance.network
+          | default(anro_ktranslate_default_network)) != 'host'
+        or
+        (anro_ktranslate_current_instance.ports
+          | default([])
+          | length) == 0
+    fail_msg: >-
+      Instance {{ anro_ktranslate_current_service_name }} uses Docker host
+      networking and must not define published ports. Services running with
+      network=host are exposed directly through the host network namespace.
+
 - name: Validate environment variables {{ anro_ktranslate_validation_service_type }}
   ansible.builtin.assert:
     that:

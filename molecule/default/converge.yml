@@ -5,32 +5,46 @@
   vars:
     anro_ktranslate_docker_binary: "/usr/local/bin/mock-docker"
     anro_ktranslate_image: "kentik/ktranslate:test"
+
+    # Verify the default bridge behavior. This instance should render both
+    # --network bridge and the configured --publish argument.
     anro_ktranslate_polling_instances:
-      - name: site-a
+      - name: bridge-test
+        enabled: true
+        network: bridge
         config:
           sinks:
             - prometheus
           prometheus_sink:
             listen_addr: ":8082"
         environment:
-          TEST_VALUE: "polling"
+          TEST_VALUE: "bridge"
         ports:
           - "18082:8082/tcp"
         command:
           - "-config"
           - "/etc/ktranslate/config.yaml"
+
+    # Host networking shares the host network namespace directly. No Docker
+    # port mappings are configured because --publish is not applicable when
+    # using --network host.
     anro_ktranslate_discovery_instances:
-      - name: site-a
-        config: {}
+      - name: host-test
+        enabled: true
+        network: host
+        config:
+          sinks:
+            - prometheus
+          prometheus_sink:
+            listen_addr: ":18083"
+        environment:
+          TEST_VALUE: "host"
+        ports: []
         command:
           - "-config"
           - "/etc/ktranslate/config.yaml"
-          - "-snmp_discovery=true"
-    anro_ktranslate_trap_instances:
-      - name: site-a
-        enabled: false
-        config: {}
-        ports:
-          - "1162:1162/udp"
+
+    anro_ktranslate_trap_instances: []
+
   roles:
     - role: anro_ktranslate

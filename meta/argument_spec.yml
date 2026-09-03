@@ -68,6 +68,9 @@ argument_specs:
         type: str
         required: false
         default: "bridge"
+        choices:
+          - bridge
+          - host
         description:
           - Default Docker network assigned to ktranslate containers.
 
@@ -118,9 +121,7 @@ argument_specs:
             required: true
             description:
               - Unique name for the instance within its service type.
-              - >
-                The name must begin with an alphanumeric character and may
-                contain letters, numbers, underscores, periods, and hyphens.
+              - The name must begin with an alphanumeric character and may contain letters, numbers, underscores, periods, and hyphens.
 
           enabled:
             type: bool
@@ -173,21 +174,15 @@ argument_specs:
             required: false
             default: {}
             description:
-              - >
-                Arbitrary ktranslate configuration rendered into the instance
-                configuration file.
-              - >
-                The structure is intentionally not constrained by the role so
-                ktranslate configuration can evolve independently.
+              - Arbitrary ktranslate configuration rendered into the instance configuration file.
+              - The structure is intentionally not constrained by the role so ktranslate configuration can evolve independently.
 
           config_no_log:
             type: bool
             required: false
             default: false
             description:
-              - >
-                Prevent Ansible from logging the rendered configuration task
-                when the configuration may contain sensitive information.
+              - Prevent Ansible from logging the rendered configuration task when the configuration may contain sensitive information.
 
           environment:
             type: dict
@@ -195,9 +190,7 @@ argument_specs:
             default: {}
             description:
               - Environment variables passed to the Docker container.
-              - >
-                Generated environment files are managed with restrictive file
-                permissions.
+              - Generated environment files are managed with restrictive file permissions.
 
           ports:
             type: list

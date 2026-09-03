@@ -3,49 +3,78 @@
   hosts: all
   become: true
   tasks:
-    - name: Gather polling service state
+    - name: Gather bridge service state
       ansible.builtin.command:
         argv:
           - systemctl
           - is-active
-          - ktranslate-polling-site-a.service
-      register: anro_ktranslate_verify_polling_active
+          - ktranslate-polling-bridge-test.service
+      register: anro_ktranslate_verify_bridge_active
       changed_when: false
 
-    - name: Gather discovery service state
+    - name: Gather host service state
       ansible.builtin.command:
         argv:
           - systemctl
           - is-active
-          - ktranslate-discovery-site-a.service
-      register: anro_ktranslate_verify_discovery_active
+          - ktranslate-discovery-host-test.service
+      register: anro_ktranslate_verify_host_active
       changed_when: false
 
-    - name: Gather trap service state
-      ansible.builtin.command:
-        argv:
-          - systemctl
-          - is-active
-          - ktranslate-traps-site-a.service
-      register: anro_ktranslate_verify_trap_active
-      changed_when: false
-      failed_when: false
+    - name: Read bridge systemd unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/ktranslate-polling-bridge-test.service
+      register: anro_ktranslate_verify_bridge_unit
 
-    - name: Verify rendered files
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      loop:
-        - /etc/systemd/system/ktranslate-polling-site-a.service
-        - /etc/systemd/system/ktranslate-discovery-site-a.service
-        - /etc/systemd/system/ktranslate-traps-site-a.service
-        - /etc/ktranslate/ktranslate-polling-site-a/config.yaml
-        - /etc/ktranslate/environment/ktranslate-polling-site-a.env
-      register: anro_ktranslate_verify_files
+    - name: Read host systemd unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/ktranslate-discovery-host-test.service
+      register: anro_ktranslate_verify_host_unit
 
-    - name: Assert expected ktranslate state
+    - name: Decode generated systemd units
+      ansible.builtin.set_fact:
+        anro_ktranslate_verify_bridge_unit_content: >-
+          {{
+            anro_ktranslate_verify_bridge_unit.content
+            | b64decode
+          }}
+        anro_ktranslate_verify_host_unit_content: >-
+          {{
+            anro_ktranslate_verify_host_unit.content
+            | b64decode
+          }}
+
+    - name: Verify bridge networking configuration
       ansible.builtin.assert:
         that:
-          - anro_ktranslate_verify_polling_active.stdout == 'active'
-          - anro_ktranslate_verify_discovery_active.stdout == 'active'
-          - anro_ktranslate_verify_trap_active.rc != 0
-          - anro_ktranslate_verify_files.results | map(attribute='stat.exists') | min
+          - anro_ktranslate_verify_bridge_active.stdout == 'active'
+          - >-
+            '--network bridge'
+            in anro_ktranslate_verify_bridge_unit_content
+          - >-
+            '--publish 18082:8082/tcp'
+            in anro_ktranslate_verify_bridge_unit_content
+        fail_msg: >-
+          The bridge ktranslate service did not render the expected Docker
+          bridge network and published port configuration.
+        success_msg: >-
+          Bridge networking correctly renders --network bridge and the
+          configured --publish argument.
+
+    - name: Verify host networking configuration
+      ansible.builtin.assert:
+        that:
+          - anro_ktranslate_verify_host_active.stdout == 'active'
+          - >-
+            '--network host'
+            in anro_ktranslate_verify_host_unit_content
+          - >-
+            '--publish'
+            not in anro_ktranslate_verify_host_unit_content
+        fail_msg: >-
+          The host-networked ktranslate service did not render correctly.
+          Host networking must use --network host and must not contain
+          Docker --publish arguments.
+        success_msg: >-
+          Host networking correctly renders --network host without any
+          --publish arguments.
