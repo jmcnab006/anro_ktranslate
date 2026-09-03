@@ -1,6 +1,0 @@
----
-- name: Deploy ktranslate collectors
-  hosts: nagios_collectors
-  become: true
-  roles:
-    - role: anro_ktranslate

@@ -1,37 +1,69 @@
 ---
-- name: Validate rendered SNMP YAML
-  ansible.builtin.command:
-    argv:
-      - python3
-      - -c
-      - |
-        import pathlib, yaml
-        p = pathlib.Path("{{ anro_ktranslate_snmp_config_path }}")
-        data = yaml.safe_load(p.read_text())
-        assert isinstance(data, dict)
-        assert "global" in data
-        assert "devices" in data
-  changed_when: false
-  become: true
-
-- name: Wait for ktranslate Prometheus endpoint
-  ansible.builtin.uri:
-    url: >-
-      http://{{ anro_ktranslate_validate_host }}:
-      {{- anro_ktranslate_validate_port -}}
-      {{- anro_ktranslate_validate_path }}
-    method: GET
-    return_content: true
-    status_code: 200
-  register: anro_ktranslate_endpoint
-  retries: "{{ anro_ktranslate_validate_retries }}"
-  delay: "{{ anro_ktranslate_validate_delay }}"
-  until: anro_ktranslate_endpoint.status == 200
-
-- name: Verify Prometheus endpoint contains metric text
+- name: Validate global ktranslate settings
   ansible.builtin.assert:
     that:
-      - "'# HELP' in anro_ktranslate_endpoint.content or '# TYPE' in anro_ktranslate_endpoint.content"
+      - anro_ktranslate_image is string
+      - anro_ktranslate_image | length > 0
+      - anro_ktranslate_docker_binary is string
+      - anro_ktranslate_docker_binary is match('^/')
+      - anro_ktranslate_systemd_dir is string
+      - anro_ktranslate_systemd_dir is match('^/')
+      - anro_ktranslate_config_dir is string
+      - anro_ktranslate_config_dir is match('^/')
+      - anro_ktranslate_environment_dir is string
+      - anro_ktranslate_environment_dir is match('^/')
+      - anro_ktranslate_container_config_dir is string
+      - anro_ktranslate_container_config_dir is match('^/')
+      - anro_ktranslate_service_prefix is match('^[A-Za-z0-9_.@-]+$')
+      - anro_ktranslate_default_pull_policy in ['always', 'missing', 'never']
+      - anro_ktranslate_default_restart_sec | int >= 0
+      - anro_ktranslate_default_stop_timeout | int > 0
+      - anro_ktranslate_polling_instances is sequence
+      - anro_ktranslate_polling_instances is not string
+      - anro_ktranslate_discovery_instances is sequence
+      - anro_ktranslate_discovery_instances is not string
+      - anro_ktranslate_trap_instances is sequence
+      - anro_ktranslate_trap_instances is not string
+    fail_msg: "Invalid global anro_ktranslate role configuration."
+
+- name: Verify Docker CLI exists
+  ansible.builtin.stat:
+    path: "{{ anro_ktranslate_docker_binary }}"
+  register: anro_ktranslate_docker_binary_stat
+
+- name: Assert Docker CLI is executable
+  ansible.builtin.assert:
+    that:
+      - anro_ktranslate_docker_binary_stat.stat.exists
+      - anro_ktranslate_docker_binary_stat.stat.isreg
+      - anro_ktranslate_docker_binary_stat.stat.executable
     fail_msg: >-
-      ktranslate answered HTTP 200, but the response did not look like a
-      Prometheus exposition endpoint.
+      Docker CLI {{ anro_ktranslate_docker_binary }} is not executable. Install
+      Docker before applying anro_ktranslate or override anro_ktranslate_docker_binary.
+
+- name: Validate polling instance definitions
+  ansible.builtin.include_tasks: validate_instance.yml
+  loop: "{{ anro_ktranslate_polling_instances }}"
+  loop_control:
+    loop_var: anro_ktranslate_raw_instance
+    label: "polling/{{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}"
+  vars:
+    anro_ktranslate_validation_service_type: "polling"
+
+- name: Validate discovery instance definitions
+  ansible.builtin.include_tasks: validate_instance.yml
+  loop: "{{ anro_ktranslate_discovery_instances }}"
+  loop_control:
+    loop_var: anro_ktranslate_raw_instance
+    label: "discovery/{{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}"
+  vars:
+    anro_ktranslate_validation_service_type: "discovery"
+
+- name: Validate trap instance definitions
+  ansible.builtin.include_tasks: validate_instance.yml
+  loop: "{{ anro_ktranslate_trap_instances }}"
+  loop_control:
+    loop_var: anro_ktranslate_raw_instance
+    label: "traps/{{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}"
+  vars:
+    anro_ktranslate_validation_service_type: "traps"

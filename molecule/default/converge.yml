@@ -1,6 +1,36 @@
 ---
 - name: Converge
-  hosts: ktranslate_collectors
+  hosts: all
   become: true
+  vars:
+    anro_ktranslate_docker_binary: "/usr/local/bin/mock-docker"
+    anro_ktranslate_image: "kentik/ktranslate:test"
+    anro_ktranslate_polling_instances:
+      - name: site-a
+        config:
+          sinks:
+            - prometheus
+          prometheus_sink:
+            listen_addr: ":8082"
+        environment:
+          TEST_VALUE: "polling"
+        ports:
+          - "18082:8082/tcp"
+        command:
+          - "-config"
+          - "/etc/ktranslate/config.yaml"
+    anro_ktranslate_discovery_instances:
+      - name: site-a
+        config: {}
+        command:
+          - "-config"
+          - "/etc/ktranslate/config.yaml"
+          - "-snmp_discovery=true"
+    anro_ktranslate_trap_instances:
+      - name: site-a
+        enabled: false
+        config: {}
+        ports:
+          - "1162:1162/udp"
   roles:
     - role: anro_ktranslate

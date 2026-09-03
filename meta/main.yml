@@ -1,13 +1,19 @@
 ---
 galaxy_info:
   role_name: anro_ktranslate
-  author: your-organization
-  description: Deploy and configure Kentik ktranslate as an SNMP-to-Prometheus collector
-  license: Apache-2.0
+  author: jmcnab006
+  description: Manage scalable ktranslate Docker containers as systemd services.
+  license: MIT
   min_ansible_version: "2.15"
   platforms:
+    - name: Debian
+      versions:
+        - bookworm
     - name: Ubuntu
       versions:
         - jammy
-        - noble
+    - name: EL
+      versions:
+        - "9"
+
 dependencies: []

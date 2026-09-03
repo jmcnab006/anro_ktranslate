@@ -1,11 +1,4 @@
 ---
-- name: Reload systemd
-  ansible.builtin.systemd:
+- name: Reload systemd daemon
+  ansible.builtin.systemd_service:
     daemon_reload: true
-  become: true
-
-- name: Restart ktranslate
-  ansible.builtin.systemd:
-    name: ktranslate
-    state: restarted
-  become: true
