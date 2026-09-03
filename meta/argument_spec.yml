@@ -1,0 +1,284 @@
+---
+argument_specs:
+  main:
+    short_description: >
+      Deploy and manage scalable ktranslate Docker containers as systemd services.
+    description:
+      - >
+        Manages polling, discovery, and trap ktranslate instances as independent
+        Docker containers controlled by systemd.
+      - >
+        Each configured instance is rendered as its own systemd service,
+        configuration directory, and environment file.
+    author:
+      - jmcnab006
+
+    options:
+      anro_ktranslate_image:
+        type: str
+        required: false
+        default: "kentik/ktranslate:latest"
+        description:
+          - Default Docker image used for ktranslate instances.
+          - Individual instances can override this value.
+
+      anro_ktranslate_docker_binary:
+        type: path
+        required: false
+        default: "/usr/bin/docker"
+        description:
+          - Absolute path to the Docker CLI binary.
+
+      anro_ktranslate_systemd_dir:
+        type: path
+        required: false
+        default: "/etc/systemd/system"
+        description:
+          - Directory where ktranslate systemd unit files are managed.
+
+      anro_ktranslate_config_dir:
+        type: path
+        required: false
+        default: "/etc/ktranslate"
+        description:
+          - Base directory containing generated ktranslate configuration.
+
+      anro_ktranslate_environment_dir:
+        type: path
+        required: false
+        default: "/etc/ktranslate/environment"
+        description:
+          - Directory containing generated Docker environment files.
+
+      anro_ktranslate_container_config_dir:
+        type: path
+        required: false
+        default: "/etc/ktranslate"
+        description:
+          - Directory inside the container where the generated configuration is mounted.
+
+      anro_ktranslate_service_prefix:
+        type: str
+        required: false
+        default: "ktranslate"
+        description:
+          - Prefix used when generating systemd service and Docker container names.
+
+      anro_ktranslate_default_network:
+        type: str
+        required: false
+        default: "bridge"
+        description:
+          - Default Docker network assigned to ktranslate containers.
+
+      anro_ktranslate_default_pull_policy:
+        type: str
+        required: false
+        default: "missing"
+        choices:
+          - always
+          - missing
+          - never
+        description:
+          - Default Docker image pull policy.
+
+      anro_ktranslate_default_restart_sec:
+        type: int
+        required: false
+        default: 5
+        description:
+          - Default number of seconds systemd waits before restarting a container.
+
+      anro_ktranslate_default_stop_timeout:
+        type: int
+        required: false
+        default: 30
+        description:
+          - Default number of seconds Docker is allowed for graceful container shutdown.
+
+      anro_ktranslate_reconcile:
+        type: bool
+        required: false
+        default: true
+        description:
+          - >
+            Remove systemd units and containers previously managed by this role
+            when they are no longer present in the desired instance configuration.
+
+      anro_ktranslate_polling_instances:
+        type: list
+        elements: dict
+        required: false
+        default: []
+        description:
+          - ktranslate instances used for polling.
+        options: &ktranslate_instance_options
+          name:
+            type: str
+            required: true
+            description:
+              - Unique name for the instance within its service type.
+              - >
+                The name must begin with an alphanumeric character and may
+                contain letters, numbers, underscores, periods, and hyphens.
+
+          enabled:
+            type: bool
+            required: false
+            default: true
+            description:
+              - Whether the corresponding systemd service is enabled and running.
+
+          image:
+            type: str
+            required: false
+            description:
+              - Docker image for this instance.
+              - Defaults to C(anro_ktranslate_image).
+
+          network:
+            type: str
+            required: false
+            description:
+              - Docker network for this instance.
+              - Defaults to C(anro_ktranslate_default_network).
+
+          pull_policy:
+            type: str
+            required: false
+            choices:
+              - always
+              - missing
+              - never
+            description:
+              - Docker image pull policy for this instance.
+              - Defaults to C(anro_ktranslate_default_pull_policy).
+
+          restart_sec:
+            type: int
+            required: false
+            description:
+              - Number of seconds systemd waits before restarting this instance.
+              - Defaults to C(anro_ktranslate_default_restart_sec).
+
+          stop_timeout:
+            type: int
+            required: false
+            description:
+              - Graceful Docker container shutdown timeout in seconds.
+              - Defaults to C(anro_ktranslate_default_stop_timeout).
+
+          config:
+            type: dict
+            required: false
+            default: {}
+            description:
+              - >
+                Arbitrary ktranslate configuration rendered into the instance
+                configuration file.
+              - >
+                The structure is intentionally not constrained by the role so
+                ktranslate configuration can evolve independently.
+
+          config_no_log:
+            type: bool
+            required: false
+            default: false
+            description:
+              - >
+                Prevent Ansible from logging the rendered configuration task
+                when the configuration may contain sensitive information.
+
+          environment:
+            type: dict
+            required: false
+            default: {}
+            description:
+              - Environment variables passed to the Docker container.
+              - >
+                Generated environment files are managed with restrictive file
+                permissions.
+
+          ports:
+            type: list
+            elements: str
+            required: false
+            default: []
+            description:
+              - Docker port publication mappings.
+              - Examples include C(8082:8082/tcp) and C(162:162/udp).
+
+          volumes:
+            type: list
+            elements: dict
+            required: false
+            default: []
+            description:
+              - Additional bind mounts supplied to the Docker container.
+            options:
+              source:
+                type: path
+                required: true
+                description:
+                  - Absolute source path on the Docker host.
+
+              target:
+                type: path
+                required: true
+                description:
+                  - Absolute destination path inside the container.
+
+              read_only:
+                type: bool
+                required: false
+                default: false
+                description:
+                  - Mount the volume read-only when enabled.
+
+          cap_add:
+            type: list
+            elements: str
+            required: false
+            default: []
+            description:
+              - Additional Linux capabilities granted to the container.
+
+          command:
+            type: list
+            elements: str
+            required: false
+            default: []
+            description:
+              - Arguments appended after the Docker image name.
+              - >
+                For the standard ktranslate image these are passed to the image
+                entrypoint.
+
+          extra_docker_args:
+            type: list
+            elements: str
+            required: false
+            default: []
+            description:
+              - Additional Docker CLI arguments inserted before the image name.
+              - >
+                Prefer explicit role options where available. This setting is
+                provided for Docker options not otherwise modeled by the role.
+
+      anro_ktranslate_discovery_instances:
+        type: list
+        elements: dict
+        required: false
+        default: []
+        description:
+          - ktranslate instances used for device discovery.
+        options: *ktranslate_instance_options
+
+      anro_ktranslate_trap_instances:
+        type: list
+        elements: dict
+        required: false
+        default: []
+        description:
+          - ktranslate instances used for receiving and processing traps.
+        options: *ktranslate_instance_options
