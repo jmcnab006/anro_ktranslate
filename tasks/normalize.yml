@@ -1,59 +1,97 @@
 ---
-- name: Initialize normalized ktranslate instance list
+- name: NORMALIZE | Initialize normalized ktranslate instance list
   ansible.builtin.set_fact:
     anro_ktranslate_instances: []
 
-- name: Add polling instances to normalized list
+- name: NORMALIZE | Normalize polling instances
   ansible.builtin.set_fact:
     anro_ktranslate_instances: >-
       {{
         anro_ktranslate_instances
-        + [item | combine({'service_type': 'polling'}, recursive=false)]
+        + [
+            item
+            | combine(
+                {
+                  'type': 'polling',
+                  'name':
+                    anro_ktranslate_service_prefix
+                    ~ '-polling-'
+                    ~ item.name
+                }
+              )
+          ]
       }}
   loop: "{{ anro_ktranslate_polling_instances }}"
   loop_control:
     label: "{{ item.name }}"
 
-- name: Add discovery instances to normalized list
+- name: NORMALIZE | Normalize discovery instances
   ansible.builtin.set_fact:
     anro_ktranslate_instances: >-
       {{
         anro_ktranslate_instances
-        + [item | combine({'service_type': 'discovery'}, recursive=false)]
+        + [
+            item
+            | combine(
+                {
+                  'type': 'discovery',
+                  'name':
+                    anro_ktranslate_service_prefix
+                    ~ '-discovery-'
+                    ~ item.name
+                }
+              )
+          ]
       }}
   loop: "{{ anro_ktranslate_discovery_instances }}"
   loop_control:
     label: "{{ item.name }}"
 
-- name: Add trap instances to normalized list
+- name: NORMALIZE | Normalize trap instances
   ansible.builtin.set_fact:
     anro_ktranslate_instances: >-
       {{
         anro_ktranslate_instances
-        + [item | combine({'service_type': 'traps'}, recursive=false)]
+        + [
+            item
+            | combine(
+                {
+                  'type': 'traps',
+                  'name':
+                    anro_ktranslate_service_prefix
+                    ~ '-traps-'
+                    ~ item.name
+                }
+              )
+          ]
       }}
   loop: "{{ anro_ktranslate_trap_instances }}"
   loop_control:
     label: "{{ item.name }}"
 
-- name: Build desired ktranslate service names
+- name: NORMALIZE | Build desired ktranslate service name list
   ansible.builtin.set_fact:
     anro_ktranslate_desired_service_names: >-
       {{
         anro_ktranslate_instances
-        | map(attribute='service_type')
-        | zip(anro_ktranslate_instances | map(attribute='name'))
-        | map('join', '-')
-        | map('regex_replace', '^(.*)$', anro_ktranslate_service_prefix ~ '-\\1')
+        | map(attribute='name')
         | list
       }}
 
-- name: Validate normalized ktranslate service names are unique
+- name: NORMALIZE | Display normalized ktranslate service names
+  ansible.builtin.debug:
+    var: anro_ktranslate_desired_service_names
+
+- name: NORMALIZE | Validate normalized ktranslate service names are unique
   ansible.builtin.assert:
     that:
       - >-
-        anro_ktranslate_desired_service_names | unique | length
-        == anro_ktranslate_desired_service_names | length
+        anro_ktranslate_desired_service_names
+        | unique
+        | length
+        ==
+        anro_ktranslate_desired_service_names
+        | length
     fail_msg: >-
-      Duplicate ktranslate service names were generated. Instance names must be
-      unique within each service type.
+      Duplicate ktranslate service names were generated. Instance names must
+      produce unique service names.

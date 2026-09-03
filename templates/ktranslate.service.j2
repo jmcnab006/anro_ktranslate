@@ -1,7 +1,7 @@
 # {{ ansible_managed }}
 
 [Unit]
-Description=ktranslate {{ anro_ktranslate_current_service_type }} instance {{ anro_ktranslate_current_instance.name }}
+Description=ktranslate {{ anro_ktranslate_instance.type }} instance {{ anro_ktranslate_instance.name }}
 Requires=docker.service
 After=docker.service
 Wants=network-online.target
@@ -9,62 +9,65 @@ After=network-online.target
 
 [Service]
 Type=simple
+Restart=on-failure
+RestartSec={{ anro_ktranslate_instance.restart_sec | default(anro_ktranslate_default_restart_sec) }}
+TimeoutStopSec={{ anro_ktranslate_instance.stop_timeout | default(anro_ktranslate_default_stop_timeout) }}
 
 # Remove a stale container from a previous service execution before starting a
 # new instance. The leading "-" tells systemd that a missing container is an
 # acceptable condition and must not prevent the service from starting.
-ExecStartPre=-{{ anro_ktranslate_docker_binary }} rm --force {{ anro_ktranslate_current_service_name }}
+ExecStartPre=-{{ anro_ktranslate_docker_binary }} rm --force {{ anro_ktranslate_instance.name }}
 
-{% set anro_ktranslate_effective_pull_policy = anro_ktranslate_current_instance.pull_policy | default(anro_ktranslate_default_pull_policy) %}
+{% set anro_ktranslate_effective_pull_policy = anro_ktranslate_instance.pull_policy | default(anro_ktranslate_default_pull_policy) %}
 {% if anro_ktranslate_effective_pull_policy == 'always' %}
 # Explicitly refresh the image before each service start when pull_policy is
 # configured as "always".
-ExecStartPre={{ anro_ktranslate_docker_binary }} pull {{ anro_ktranslate_current_instance.image | default(anro_ktranslate_image) }}
+ExecStartPre={{ anro_ktranslate_docker_binary }} pull {{ anro_ktranslate_instance.image | default(anro_ktranslate_image) }}
 {% elif anro_ktranslate_effective_pull_policy == 'missing' %}
 # Docker automatically uses the local image when present and pulls it when it
 # is missing. The explicit --pull=missing option documents that behavior.
 {% endif %}
 
 ExecStart={{ anro_ktranslate_docker_binary }} run \
-  --name {{ anro_ktranslate_current_service_name }} \
-  --network {{ anro_ktranslate_current_instance.network | default(anro_ktranslate_default_network) }} \
+  --name {{ anro_ktranslate_instance.name }} \
+  --network {{ anro_ktranslate_instance.network | default(anro_ktranslate_default_network) }} \
 {% if anro_ktranslate_effective_pull_policy == 'missing' %}
   --pull missing \
 {% elif anro_ktranslate_effective_pull_policy == 'never' %}
   --pull never \
 {% endif %}
-{% if (anro_ktranslate_current_instance.network | default(anro_ktranslate_default_network)) == 'bridge' %}
-{% for port in anro_ktranslate_current_instance.ports | default([]) %}
+{% if (anro_ktranslate_instance.network | default(anro_ktranslate_default_network)) == 'bridge' %}
+{% for port in anro_ktranslate_instance.ports | default([]) %}
   --publish {{ port }} \
 {% endfor %}
 {% endif %}
-{% for capability in anro_ktranslate_current_instance.cap_add | default([]) %}
+{% for capability in anro_ktranslate_instance.cap_add | default([]) %}
   --cap-add {{ capability }} \
 {% endfor %}
-{% for volume in anro_ktranslate_current_instance.volumes | default([]) %}
+{% for volume in anro_ktranslate_instance.volumes | default([]) %}
   --mount type=bind,source={{ volume.source }},target={{ volume.target }}{% if volume.read_only | default(false) | bool %},readonly{% endif %} \
 {% endfor %}
-  --mount type=bind,source={{ anro_ktranslate_config_dir }}/{{ anro_ktranslate_current_service_name }}.yaml,target={{ anro_ktranslate_container_config_dir }}/config.yaml,readonly \
-  --env-file {{ anro_ktranslate_environment_dir }}/{{ anro_ktranslate_current_service_name }}.env \
-{% for docker_arg in anro_ktranslate_current_instance.extra_docker_args | default([]) %}
+  --mount type=bind,source={{ anro_ktranslate_config_dir }}/{{ anro_ktranslate_instance.name }}/config.yaml,target={{ anro_ktranslate_container_config_dir }}/config.yaml,readonly \
+  --env-file {{ anro_ktranslate_environment_dir }}/{{ anro_ktranslate_instance.name }}.env \
+{% for docker_arg in anro_ktranslate_instance.extra_docker_args | default([]) %}
   {{ docker_arg }} \
 {% endfor %}
-  {{ anro_ktranslate_current_instance.image | default(anro_ktranslate_image) }}{% for command_arg in anro_ktranslate_current_instance.command | default([]) %} {{ command_arg }}{% endfor %}
+  {{ anro_ktranslate_instance.image | default(anro_ktranslate_image) }}{% for command_arg in anro_ktranslate_instance.command | default([]) %} {{ command_arg }}{% endfor %}
 
 # Docker receives the configured graceful shutdown timeout before forcibly
 # terminating the container.
 ExecStop={{ anro_ktranslate_docker_binary }} stop \
-  --time {{ anro_ktranslate_current_instance.stop_timeout | default(anro_ktranslate_default_stop_timeout) }} \
-  {{ anro_ktranslate_current_service_name }}
+  --time {{ anro_ktranslate_instance.stop_timeout | default(anro_ktranslate_default_stop_timeout) }} \
+  {{ anro_ktranslate_instance.name }}
 
 # Ensure the stopped container is removed so subsequent starts cannot fail due
 # to a container with the same name already existing.
 ExecStopPost=-{{ anro_ktranslate_docker_binary }} rm \
   --force \
-  {{ anro_ktranslate_current_service_name }}
+  {{ anro_ktranslate_instance.name }}
 
 Restart=always
-RestartSec={{ anro_ktranslate_current_instance.restart_sec | default(anro_ktranslate_default_restart_sec) }}
+RestartSec={{ anro_ktranslate_instance.restart_sec | default(anro_ktranslate_default_restart_sec) }}
 
 # Do not apply systemd's default service start-rate limiting. Docker-backed
 # services may legitimately restart several times while an external dependency

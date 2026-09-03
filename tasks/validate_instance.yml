@@ -1,5 +1,5 @@
 ---
-- name: Validate instance structure {{ anro_ktranslate_validation_service_type }}
+- name: VALIDATE INSTANCE | Validate instance structure {{ anro_ktranslate_validation_service_type }}
   ansible.builtin.assert:
     that:
       - anro_ktranslate_raw_instance is mapping
@@ -29,22 +29,22 @@
       Invalid {{ anro_ktranslate_validation_service_type }} instance definition:
       {{ anro_ktranslate_raw_instance }}
 
-- name: Validate host networking configuration for {{ anro_ktranslate_current_service_name }}
+- name: VALIDATE INSTANCE | Validate network and port compatibility for {{ anro_ktranslate_validation_service_type }}
   ansible.builtin.assert:
     that:
       - >-
-        (anro_ktranslate_current_instance.network
+        (anro_ktranslate_raw_instance.network
           | default(anro_ktranslate_default_network)) != 'host'
         or
-        (anro_ktranslate_current_instance.ports
+        (anro_ktranslate_raw_instance.ports
           | default([])
           | length) == 0
     fail_msg: >-
-      Instance {{ anro_ktranslate_current_service_name }} uses Docker host
-      networking and must not define published ports. Services running with
-      network=host are exposed directly through the host network namespace.
+      Instance {{ anro_ktranslate_raw_instance.name }} uses Docker host
+      networking and must not define published ports. Docker --publish is not
+      applicable when the container shares the host network namespace.
 
-- name: Validate environment variables {{ anro_ktranslate_validation_service_type }}
+- name: VALIDATE INSTANCE | Validate environment variables {{ anro_ktranslate_validation_service_type }}
   ansible.builtin.assert:
     that:
       - item.key is match('^[A-Za-z_][A-Za-z0-9_]*$')
@@ -57,7 +57,7 @@
   loop_control:
     label: "{{ item.key }}"
 
-- name: Validate volume definitions {{ anro_ktranslate_validation_service_type }}
+- name: VALIDATE INSTANCE | Validate volume definitions {{ anro_ktranslate_validation_service_type }}
   ansible.builtin.assert:
     that:
       - item is mapping
@@ -75,7 +75,7 @@
   loop_control:
     label: "{{ item.source | default('INVALID') }}"
 
-- name: Validate port mappings {{ anro_ktranslate_validation_service_type }}
+- name: VALIDATE INSTANCE | Validate port mappings {{ anro_ktranslate_validation_service_type }}
   ansible.builtin.assert:
     that:
       - item is string
@@ -88,7 +88,7 @@
   loop_control:
     label: "{{ item }}"
 
-- name: Validate capability names {{ anro_ktranslate_validation_service_type }}
+- name: VALIDATE INSTANCE | Validate capability names {{ anro_ktranslate_validation_service_type }}
   ansible.builtin.assert:
     that:
       - item is string
@@ -100,7 +100,7 @@
   loop_control:
     label: "{{ item }}"
 
-- name: Validate command arguments {{ anro_ktranslate_validation_service_type }}
+- name: VALIDATE INSTANCE | Validate command arguments {{ anro_ktranslate_validation_service_type }}
   ansible.builtin.assert:
     that:
       - item is string
@@ -113,7 +113,7 @@
   loop_control:
     label: "{{ item }}"
 
-- name: Validate extra Docker arguments {{ anro_ktranslate_validation_service_type }}
+- name: VALIDATE INSTANCE | Validate extra Docker arguments {{ anro_ktranslate_validation_service_type }}
   ansible.builtin.assert:
     that:
       - item is string

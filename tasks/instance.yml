@@ -1,12 +1,15 @@
 ---
-- name: Set derived values for {{ anro_ktranslate_instance.name }}
-  ansible.builtin.set_fact:
-    anro_ktranslate_current_service_name: >-
-      {{ anro_ktranslate_service_prefix }}-{{ anro_ktranslate_instance.service_type }}-{{ anro_ktranslate_instance.name }}
-    anro_ktranslate_current_config_dir: >-
-      {{ anro_ktranslate_config_dir }}/{{ anro_ktranslate_service_prefix }}-{{ anro_ktranslate_instance.service_type }}-{{ anro_ktranslate_instance.name }}
+- name: NORMALIZE | Display normalized ktranslate service names
+  ansible.builtin.debug:
+    var: anro_ktranslate_instance
 
-- name: Create configuration directory for {{ anro_ktranslate_current_service_name }}
+- name: INSTANCE | Set derived values for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_current_service_name: "{{ anro_ktranslate_instance.name }}"
+    anro_ktranslate_current_config_dir: >-
+      {{ anro_ktranslate_config_dir }}/{{ anro_ktranslate_instance.name }}
+
+- name: INSTANCE | Create configuration directory for {{ anro_ktranslate_current_service_name }}
   ansible.builtin.file:
     path: "{{ anro_ktranslate_current_config_dir }}"
     state: directory
@@ -14,7 +17,7 @@
     group: root
     mode: "0755"
 
-- name: Render ktranslate configuration for {{ anro_ktranslate_current_service_name }}
+- name: INSTANCE | Render ktranslate configuration for {{ anro_ktranslate_current_service_name }}
   ansible.builtin.template:
     src: ktranslate-config.yaml.j2
     dest: "{{ anro_ktranslate_current_config_dir }}/config.yaml"
@@ -24,7 +27,7 @@
   register: anro_ktranslate_current_config_template
   no_log: "{{ anro_ktranslate_instance.config_no_log | default(false) | bool }}"
 
-- name: Render environment file for {{ anro_ktranslate_current_service_name }}
+- name: INSTANCE | Render environment file for {{ anro_ktranslate_current_service_name }}
   ansible.builtin.template:
     src: ktranslate.env.j2
     dest: "{{ anro_ktranslate_environment_dir }}/{{ anro_ktranslate_current_service_name }}.env"
@@ -34,7 +37,7 @@
   register: anro_ktranslate_current_environment_template
   no_log: true
 
-- name: Render systemd unit for {{ anro_ktranslate_current_service_name }}
+- name: INSTANCE | Render systemd unit for {{ anro_ktranslate_current_service_name }}
   ansible.builtin.template:
     src: ktranslate.service.j2
     dest: "{{ anro_ktranslate_systemd_dir }}/{{ anro_ktranslate_current_service_name }}.service"
@@ -43,7 +46,7 @@
     mode: "0644"
   register: anro_ktranslate_current_unit_template
 
-- name: Manage service state {{ anro_ktranslate_current_service_name }}
+- name: INSTANCE | Manage service state {{ anro_ktranslate_current_service_name }}
   ansible.builtin.systemd_service:
     name: "{{ anro_ktranslate_current_service_name }}.service"
     enabled: "{{ anro_ktranslate_instance.enabled | default(true) | bool }}"

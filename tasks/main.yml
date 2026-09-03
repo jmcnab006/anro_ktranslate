@@ -1,21 +1,21 @@
 ---
-- name: Validate ktranslate role configuration
+- name: MAIN | Validate ktranslate role configuration
   ansible.builtin.import_tasks: validate.yml
 
-- name: Prepare ktranslate host directories
+- name: MAIN | Prepare ktranslate host directories
   ansible.builtin.import_tasks: directories.yml
 
-- name: Normalize ktranslate instance configuration
+- name: MAIN | Normalize ktranslate instance configuration
   ansible.builtin.import_tasks: normalize.yml
 
-- name: Reconcile removed ktranslate instances
+- name: MAIN | Reconcile removed ktranslate instances
   ansible.builtin.import_tasks: reconcile.yml
   when: anro_ktranslate_reconcile | bool
 
-- name: Configure desired ktranslate instances
+- name: MAIN | Configure desired ktranslate instances
   ansible.builtin.include_tasks: instance.yml
   loop: "{{ anro_ktranslate_instances }}"
   loop_control:
     loop_var: anro_ktranslate_instance
     label: >-
-      {{ anro_ktranslate_instance.service_type }}/{{ anro_ktranslate_instance.name }}
+      {{ anro_ktranslate_instance.type }}/{{ anro_ktranslate_instance.name }}

@@ -1,5 +1,5 @@
 ---
-- name: Validate global ktranslate settings
+- name: VALIDATE | Validate global ktranslate settings
   ansible.builtin.assert:
     that:
       - anro_ktranslate_image is string
@@ -26,12 +26,12 @@
       - anro_ktranslate_trap_instances is not string
     fail_msg: "Invalid global anro_ktranslate role configuration."
 
-- name: Verify Docker CLI exists
+- name: VALIDATE | Verify Docker CLI exists
   ansible.builtin.stat:
     path: "{{ anro_ktranslate_docker_binary }}"
   register: anro_ktranslate_docker_binary_stat
 
-- name: Assert Docker CLI is executable
+- name: VALIDATE | Assert Docker CLI is executable
   ansible.builtin.assert:
     that:
       - anro_ktranslate_docker_binary_stat.stat.exists
@@ -41,7 +41,7 @@
       Docker CLI {{ anro_ktranslate_docker_binary }} is not executable. Install
       Docker before applying anro_ktranslate or override anro_ktranslate_docker_binary.
 
-- name: Validate polling instance definitions
+- name: VALIDATE | Validate polling instance definitions
   ansible.builtin.include_tasks: validate_instance.yml
   loop: "{{ anro_ktranslate_polling_instances }}"
   loop_control:
@@ -50,7 +50,7 @@
   vars:
     anro_ktranslate_validation_service_type: "polling"
 
-- name: Validate discovery instance definitions
+- name: VALIDATE | Validate discovery instance definitions
   ansible.builtin.include_tasks: validate_instance.yml
   loop: "{{ anro_ktranslate_discovery_instances }}"
   loop_control:
@@ -59,7 +59,7 @@
   vars:
     anro_ktranslate_validation_service_type: "discovery"
 
-- name: Validate trap instance definitions
+- name: VALIDATE | Validate trap instance definitions
   ansible.builtin.include_tasks: validate_instance.yml
   loop: "{{ anro_ktranslate_trap_instances }}"
   loop_control:
