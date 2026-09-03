@@ -2,17 +2,20 @@
 - name: Prepare
   hosts: all
   become: true
-
   tasks:
-    - name: Install Docker runtime
+    # The target intentionally runs a real nested Docker daemon. This validates
+    # the actual systemd -> Docker lifecycle instead of a mock CLI contract.
+    - name: PREPARE | Install Docker runtime
       ansible.builtin.apt:
         name:
-          - docker.io
           - ca-certificates
+          - docker.io
         state: present
         update_cache: true
 
-    - name: Create Docker configuration directory
+    # vfs trades performance for compatibility in privileged Docker-in-Docker
+    # and avoids depending on the outer host's storage driver capabilities.
+    - name: PREPARE | Create Docker configuration directory
       ansible.builtin.file:
         path: /etc/docker
         state: directory
@@ -20,7 +23,7 @@
         group: root
         mode: "0755"
 
-    - name: Configure Docker for nested Molecule execution
+    - name: PREPARE | Configure nested Docker storage driver
       ansible.builtin.copy:
         dest: /etc/docker/daemon.json
         owner: root
@@ -32,7 +35,7 @@
           }
       register: anro_ktranslate_molecule_docker_config
 
-    - name: Enable and start Docker
+    - name: PREPARE | Enable and start Docker
       ansible.builtin.systemd_service:
         name: docker.service
         enabled: true
@@ -44,7 +47,7 @@
           }}
         daemon_reload: true
 
-    - name: Wait for nested Docker daemon
+    - name: PREPARE | Wait for nested Docker daemon
       ansible.builtin.command:
         argv:
           - /usr/bin/docker
@@ -55,7 +58,9 @@
       delay: 2
       until: anro_ktranslate_molecule_docker_info.rc == 0
 
-    - name: Pull Molecule workload image
+    # Use Ubuntu throughout the lifecycle test so the nested workload matches
+    # the operating-system family used for this role's primary deployment target.
+    - name: PREPARE | Pull Ubuntu workload image
       ansible.builtin.command:
         argv:
           - /usr/bin/docker
@@ -63,5 +68,16 @@
           - ubuntu:24.04
       register: anro_ktranslate_molecule_image_pull
       changed_when: >-
-        'Downloaded newer image'
-        in anro_ktranslate_molecule_image_pull.stdout
+        'Downloaded newer image' in anro_ktranslate_molecule_image_pull.stdout
+
+    # This file simulates configuration owned by a future API/Git/NetBox renderer.
+    # The ktranslate role must mount it without taking ownership of its contents.
+    - name: PREPARE | Create externally managed test configuration
+      ansible.builtin.copy:
+        dest: /var/lib/ktranslate-external.conf
+        owner: root
+        group: root
+        mode: "0640"
+        content: |
+          ownership=external
+          scenario=molecule

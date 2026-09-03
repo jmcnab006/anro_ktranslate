@@ -1,0 +1,319 @@
+---
+argument_specs:
+  main:
+    short_description: Manage multiple ktranslate Docker containers as systemd services.
+    description:
+      - >-
+        Deploys a desired stack of independent ktranslate containers without
+        encoding ktranslate input, format, or sink semantics into the role.
+      - >-
+        Prometheus is the default command behavior, but every instance can
+        replace the command completely.
+      - >-
+        Configuration files can be rendered from static inventory data or
+        mounted from externally managed host paths.
+    options:
+      anro_ktranslate_image:
+        type: str
+        default: "kentik/ktranslate:latest"
+        description:
+          - Default Docker image used when an instance does not set image.
+          - Pin an explicit version or digest in production.
+
+      anro_ktranslate_docker_binary:
+        type: path
+        default: "/usr/bin/docker"
+        description:
+          - Absolute path to the Docker CLI.
+          - Docker installation is intentionally outside this role.
+
+      anro_ktranslate_systemd_dir:
+        type: path
+        default: "/etc/systemd/system"
+        description:
+          - Directory where role-managed systemd units are written.
+
+      anro_ktranslate_config_dir:
+        type: path
+        default: "/etc/ktranslate"
+        description:
+          - Root host directory for role-managed per-instance files.
+
+      anro_ktranslate_environment_dir:
+        type: path
+        default: "/etc/ktranslate/environment"
+        description:
+          - Root-only directory for generated Docker environment files.
+
+      anro_ktranslate_service_prefix:
+        type: str
+        default: "ktranslate"
+        description:
+          - Prefix required on instance names and used to scope reconciliation.
+
+      anro_ktranslate_default_network:
+        type: str
+        default: "bridge"
+        description:
+          - Default Docker network mode for instances.
+
+      anro_ktranslate_default_pull_policy:
+        type: str
+        default: "missing"
+        choices:
+          - always
+          - missing
+          - never
+        description:
+          - Default value passed to Docker run --pull.
+
+      anro_ktranslate_default_restart_sec:
+        type: int
+        default: 5
+        description:
+          - Default systemd restart delay in seconds.
+
+      anro_ktranslate_default_stop_timeout:
+        type: int
+        default: 30
+        description:
+          - Default Docker stop timeout in seconds.
+
+      anro_ktranslate_default_start_limit_interval_sec:
+        type: int
+        default: 60
+        description:
+          - Default systemd start-rate-limit interval in seconds.
+
+      anro_ktranslate_default_start_limit_burst:
+        type: int
+        default: 5
+        description:
+          - Default number of starts allowed inside the rate-limit interval.
+
+      anro_ktranslate_default_command:
+        type: list
+        elements: str
+        default:
+          - "-format=prometheus"
+          - "-sinks=prometheus"
+          - "-prom_listen=:8082"
+        description:
+          - >-
+            Default arguments appended after the container image. The upstream
+            ktranslate image uses the ktranslate binary as its entrypoint.
+          - >-
+            An instance command replaces this list completely, allowing any
+            ktranslate-supported format, sink, input mode, or other CLI option.
+
+      anro_ktranslate_reconcile:
+        type: bool
+        default: true
+        description:
+          - >-
+            Stop and remove role-managed services and artifacts whose names are
+            no longer present in anro_ktranslate_instances.
+
+      anro_ktranslate_instances:
+        type: list
+        elements: dict
+        default: []
+        description:
+          - Desired set of independent ktranslate containers.
+          - >-
+            The name is the exact systemd unit and Docker container basename;
+            type is descriptive metadata and does not select role logic.
+        options:
+          name:
+            type: str
+            required: true
+            description:
+              - Exact Docker container and systemd service basename.
+              - Must begin with anro_ktranslate_service_prefix followed by a dash.
+
+          type:
+            type: str
+            required: true
+            description:
+              - >-
+                Descriptive workload classification such as polling, discovery,
+                traps, flow, or syslog. The role does not special-case this value.
+
+          enabled:
+            type: bool
+            default: true
+            description:
+              - Whether the systemd service is enabled and running.
+
+          image:
+            type: str
+            description:
+              - Per-instance Docker image override.
+
+          network:
+            type: str
+            description:
+              - Per-instance Docker network mode override.
+              - Host-network instances must not define ports.
+
+          pull_policy:
+            type: str
+            choices:
+              - always
+              - missing
+              - never
+            description:
+              - Per-instance Docker image pull policy override.
+
+          restart_sec:
+            type: int
+            description:
+              - Per-instance systemd restart delay in seconds.
+
+          stop_timeout:
+            type: int
+            description:
+              - Per-instance Docker stop timeout in seconds.
+
+          start_limit_interval_sec:
+            type: int
+            description:
+              - Per-instance systemd start-rate-limit interval in seconds.
+
+          start_limit_burst:
+            type: int
+            description:
+              - Per-instance allowed starts within the start-limit interval.
+
+          environment:
+            type: dict
+            default: {}
+            description:
+              - Environment variables written to a root-only Docker env file.
+              - Prefer this surface for credentials when ktranslate supports it.
+
+          ports:
+            type: list
+            elements: str
+            default: []
+            description:
+              - Docker publish specifications such as 127.0.0.1:18082:8082/tcp.
+              - Must be empty when network is host.
+
+          files:
+            type: list
+            elements: dict
+            default: []
+            description:
+              - Files mounted individually into the container.
+              - >-
+                Managed files are rendered by this role from static inventory
+                content; external files are owned by another process or role.
+            options:
+              name:
+                type: str
+                required: true
+                description:
+                  - Unique filename used under the instance host directory.
+
+              source:
+                type: str
+                default: managed
+                choices:
+                  - managed
+                  - external
+                description:
+                  - Whether this role renders content or mounts an existing host file.
+
+              host_path:
+                type: path
+                description:
+                  - Required absolute host path when source is external.
+                  - Not valid when source is managed.
+
+              destination:
+                type: path
+                required: true
+                description:
+                  - Absolute file path inside the container.
+
+              format:
+                type: str
+                default: raw
+                choices:
+                  - raw
+                  - yaml
+                  - json
+                description:
+                  - Serialization applied to managed content.
+                  - Raw requires string content; YAML/JSON accept mappings or lists.
+
+              content:
+                type: raw
+                description:
+                  - Static content for a managed file.
+                  - Must not be supplied for an external file.
+
+              mode:
+                type: str
+                default: "0640"
+                description:
+                  - Host mode for a managed file.
+
+              read_only:
+                type: bool
+                default: true
+                description:
+                  - Mount the file read-only inside the container.
+
+              no_log:
+                type: bool
+                default: false
+                description:
+                  - Hide managed file content from Ansible task output when sensitive.
+
+          volumes:
+            type: list
+            elements: dict
+            default: []
+            description:
+              - Additional generic bind mounts, typically for directories.
+            options:
+              source:
+                type: path
+                required: true
+                description:
+                  - Absolute host source path.
+              target:
+                type: path
+                required: true
+                description:
+                  - Absolute container target path.
+              read_only:
+                type: bool
+                default: false
+                description:
+                  - Mount the volume read-only.
+
+          cap_add:
+            type: list
+            elements: str
+            default: []
+            description:
+              - Linux capabilities passed to Docker with --cap-add.
+
+          command:
+            type: list
+            elements: str
+            description:
+              - >-
+                Arguments appended after the image. When omitted, inherits
+                anro_ktranslate_default_command; when provided, replaces it.
+
+          extra_docker_args:
+            type: list
+            elements: str
+            default: []
+            description:
+              - Escape hatch for Docker run options not modeled by the role.
+              - Do not place credentials here because unit files are readable.

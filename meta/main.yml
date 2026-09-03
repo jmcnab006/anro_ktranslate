@@ -15,5 +15,4 @@ galaxy_info:
     - name: EL
       versions:
         - "9"
-
 dependencies: []

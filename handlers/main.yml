@@ -1,4 +1,6 @@
 ---
+# Reconciliation can remove multiple units in one run; a handler coalesces the
+# required daemon reload instead of reloading systemd after every deleted unit.
 - name: Reload systemd daemon
   ansible.builtin.systemd_service:
     daemon_reload: true

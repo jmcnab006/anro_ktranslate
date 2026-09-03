@@ -1,20 +1,6 @@
 ---
-ansible:
-  cfg:
-    defaults:
-      deprecation_warnings: false
-      callbacks_enabled: profile_tasks
-      pipelining: true
-      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/..
-  executor:
-    args:
-      ansible_playbook:
-        - --inventory=${MOLECULE_SCENARIO_DIRECTORY}/inventory/
-
 dependency:
   name: galaxy
-  options:
-    requirements-file: ${MOLECULE_SCENARIO_DIRECTORY}/requirements.yml
 
 driver:
   name: docker
@@ -23,40 +9,16 @@ platforms:
   - name: ktranslate-ubuntu-2404
     image: "geerlingguy/docker-ubuntu2404-ansible:latest"
     pre_build_image: true
-
-    # Docker-in-Docker requires the Molecule target itself to be privileged.
-    # This also allows systemd and the nested Docker daemon to manage cgroups
-    # and network namespaces.
     privileged: true
     cgroupns_mode: host
-
-    # systemd must run as PID 1 inside the Molecule target.
     command: "/lib/systemd/systemd"
-
-    # Let systemd know it is executing inside a Docker container.
     env:
       container: docker
-
-    # systemd and the nested Docker daemon need access to the host cgroup
-    # hierarchy.
     volumes:
       - "/sys/fs/cgroup:/sys/fs/cgroup:rw"
-
-    # Runtime directories should be ephemeral and writable by systemd.
     tmpfs:
       - /run
       - /tmp
-
-# scenario:
-#  test_sequence:
-#    - dependency
-#    - destroy
-#    - create
-#    - prepare
-#    - converge
-#    - idempotence
-#    - verify
-#    - destroy
 
 provisioner:
   name: ansible

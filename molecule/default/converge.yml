@@ -2,79 +2,69 @@
 - name: Converge
   hosts: all
   become: true
-
   vars:
-    ansible_connection: community.docker.docker
-
     anro_ktranslate_docker_binary: "/usr/bin/docker"
+    anro_ktranslate_image: "ubuntu:24.04"
 
-    # Alpine is used because this Molecule scenario is testing the role's
-    # systemd/Docker lifecycle rather than ktranslate application behavior.
-    #
-    # Testing the actual kentik/ktranslate image should be a separate
-    # application/integration scenario.
-    anro_ktranslate_image: "alpine:3.20"
-
-    # Mount the generated test configuration below /tmp because that directory
-    # already exists in the Alpine image.
-    anro_ktranslate_container_config_dir: "/tmp"
-
-    anro_ktranslate_polling_instances:
-      - name: bridge-test
+    anro_ktranslate_instances:
+      # Bridge instance exercises port publishing and both raw/YAML managed files.
+      - name: ktranslate-polling-bridge-test
+        type: polling
         enabled: true
         network: bridge
-
-        config:
-          molecule_test: true
-          service_type: polling
-
-        environment:
-          MOLECULE_NETWORK_MODE: "bridge"
-
-        # Docker must publish this port because the instance uses bridge
-        # networking. Nothing needs to listen on the port for this test; the
-        # Docker HostConfig is verified directly in verify.yml.
         ports:
           - "127.0.0.1:18082:8082/tcp"
-
+        environment:
+          MOLECULE_NETWORK_MODE: "bridge"
+        files:
+          - name: polling.yaml
+            source: managed
+            destination: /tmp/polling.yaml
+            format: yaml
+            content:
+              molecule_test: true
+              type: polling
+          - name: banner.txt
+            source: managed
+            destination: /tmp/banner.txt
+            format: raw
+            content: |
+              managed-by=anro_ktranslate
         command:
           - sleep
-          - "3600"
+          - infinity
 
-    anro_ktranslate_discovery_instances:
-      - name: host-test
+      # Host-network instance proves that no Docker --publish argument is emitted
+      # and that externally owned files can be mounted through the same model.
+      - name: ktranslate-discovery-host-test
+        type: discovery
         enabled: true
         network: host
-
-        config:
-          molecule_test: true
-          service_type: discovery
-
         environment:
           MOLECULE_NETWORK_MODE: "host"
-
-        # Host-network containers must not use Docker port publishing.
-        ports: []
-
+        files:
+          - name: external.conf
+            source: external
+            host_path: /var/lib/ktranslate-external.conf
+            destination: /tmp/external.conf
         command:
           - sleep
-          - "3600"
+          - infinity
 
-    anro_ktranslate_trap_instances:
-      - name: disabled-test
+      - name: ktranslate-traps-disabled-test
+        type: traps
         enabled: false
         network: host
-
-        config:
-          molecule_test: true
-          service_type: traps
-
-        environment: {}
-        ports: []
-
         command:
           - sleep
-          - "3600"
+          - infinity
+
+      # The workload image is Ubuntu, so this instance remains disabled. Its unit
+      # verifies that omission of command inherits the role's Prometheus default.
+      - name: ktranslate-default-prometheus-test
+        type: polling
+        enabled: false
+        network: bridge
 
   roles:
     - role: anro_ktranslate

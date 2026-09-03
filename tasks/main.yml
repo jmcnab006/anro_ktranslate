@@ -1,21 +1,23 @@
 ---
+# Validate before changing host state so malformed instance definitions fail
+# early and do not leave a partially configured service stack.
 - name: MAIN | Validate ktranslate role configuration
   ansible.builtin.import_tasks: validate.yml
 
 - name: MAIN | Prepare ktranslate host directories
   ansible.builtin.import_tasks: directories.yml
 
-- name: MAIN | Normalize ktranslate instance configuration
-  ansible.builtin.import_tasks: normalize.yml
-
+# Reconciliation is performed before desired instances are configured so stale
+# services cannot retain ports or host-network listeners needed by new units.
 - name: MAIN | Reconcile removed ktranslate instances
   ansible.builtin.import_tasks: reconcile.yml
   when: anro_ktranslate_reconcile | bool
 
+# Every workload follows the same lifecycle. The instance 'type' is metadata,
+# which keeps future polling, discovery, trap, flow, or other modes role-agnostic.
 - name: MAIN | Configure desired ktranslate instances
   ansible.builtin.include_tasks: instance.yml
   loop: "{{ anro_ktranslate_instances }}"
   loop_control:
     loop_var: anro_ktranslate_instance
-    label: >-
-      {{ anro_ktranslate_instance.type }}/{{ anro_ktranslate_instance.name }}
+    label: "{{ anro_ktranslate_instance.type }}/{{ anro_ktranslate_instance.name }}"

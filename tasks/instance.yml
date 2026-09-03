@@ -1,65 +1,150 @@
 ---
-- name: NORMALIZE | Display normalized ktranslate service names
-  ansible.builtin.debug:
-    var: anro_ktranslate_instance
-
-- name: INSTANCE | Set derived values for {{ anro_ktranslate_instance.name }}
+# The instance name is already the complete service/container basename. Keeping
+# one canonical name prevents the double-prefix bugs that normalization caused.
+- name: INSTANCE | Set derived paths for {{ anro_ktranslate_instance.name }}
   ansible.builtin.set_fact:
-    anro_ktranslate_current_service_name: "{{ anro_ktranslate_instance.name }}"
-    anro_ktranslate_current_config_dir: >-
-      {{ anro_ktranslate_config_dir }}/{{ anro_ktranslate_instance.name }}
+    anro_ktranslate_current_config_dir: "{{ anro_ktranslate_config_dir }}/{{ anro_ktranslate_instance.name }}"
 
-- name: INSTANCE | Create configuration directory for {{ anro_ktranslate_current_service_name }}
+# Create the per-instance directory even when only external files are mounted;
+# this gives operators a predictable location for role-owned instance artifacts.
+- name: INSTANCE | Create configuration directory for {{ anro_ktranslate_instance.name }}
   ansible.builtin.file:
     path: "{{ anro_ktranslate_current_config_dir }}"
     state: directory
     owner: root
     group: root
-    mode: "0755"
+    mode: "0750"
 
-- name: INSTANCE | Render ktranslate configuration for {{ anro_ktranslate_current_service_name }}
-  ansible.builtin.template:
-    src: ktranslate-config.yaml.j2
-    dest: "{{ anro_ktranslate_current_config_dir }}/config.yaml"
+# Reconcile files inside the role-owned instance directory. External files live
+# elsewhere and are never removed by this role.
+- name: INSTANCE | Build desired managed file list for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_desired_managed_file_names: >-
+      {{
+        (
+          anro_ktranslate_instance.files | default([])
+          | selectattr('source', 'undefined')
+          | map(attribute='name')
+          | list
+        )
+        +
+        (
+          anro_ktranslate_instance.files | default([])
+          | selectattr('source', 'defined')
+          | selectattr('source', 'equalto', 'managed')
+          | map(attribute='name')
+          | list
+        )
+      }}
+
+- name: INSTANCE | Find existing managed files for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.find:
+    paths: "{{ anro_ktranslate_current_config_dir }}"
+    file_type: file
+    recurse: false
+  register: anro_ktranslate_existing_managed_files
+
+- name: INSTANCE | Remove obsolete managed files for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ anro_ktranslate_existing_managed_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: (item.path | basename) not in anro_ktranslate_desired_managed_file_names
+  register: anro_ktranslate_obsolete_managed_files
+
+# Render only files whose source is 'managed'. Raw content is copied verbatim;
+# YAML and JSON content are serialized from inventory data without requiring a
+# ktranslate-specific Ansible schema.
+- name: INSTANCE | Render managed files for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.copy:
+    dest: "{{ anro_ktranslate_current_config_dir }}/{{ item.name }}"
     owner: root
     group: root
-    mode: "0640"
-  register: anro_ktranslate_current_config_template
-  no_log: "{{ anro_ktranslate_instance.config_no_log | default(false) | bool }}"
+    mode: "{{ item.mode | default('0640') }}"
+    content: >-
+      {{
+        item.content
+        if (item.format | default('raw')) == 'raw'
+        else (
+          item.content | to_nice_json(indent=2)
+          if (item.format | default('raw')) == 'json'
+          else item.content | to_nice_yaml(indent=2, sort_keys=false)
+        )
+      }}
+  loop: "{{ anro_ktranslate_instance.files | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: (item.source | default('managed')) == 'managed'
+  register: anro_ktranslate_managed_file_results
+  no_log: "{{ item.no_log | default(false) | bool }}"
 
-- name: INSTANCE | Render environment file for {{ anro_ktranslate_current_service_name }}
+# Fail before systemd/Docker if an externally owned configuration file is absent.
+# A future renderer can own these paths without changing this role's file model.
+- name: INSTANCE | Inspect external files for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.stat:
+    path: "{{ item.host_path }}"
+    get_checksum: true
+  loop: "{{ anro_ktranslate_instance.files | default([]) }}"
+  loop_control:
+    label: "{{ item.host_path | default(item.name) }}"
+  when: (item.source | default('managed')) == 'external'
+  register: anro_ktranslate_external_file_stats
+
+- name: INSTANCE | Assert external files exist for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+    fail_msg: >-
+      External file {{ item.item.host_path }} for {{ anro_ktranslate_instance.name }}
+      must exist before the ktranslate service is started.
+  loop: "{{ anro_ktranslate_external_file_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.host_path | default('UNKNOWN') }}"
+  when: not (item.skipped | default(false) | bool)
+
+# Environment files are always present, including for an empty environment,
+# which keeps the systemd command stable and avoids conditional --env-file logic.
+- name: INSTANCE | Render environment file for {{ anro_ktranslate_instance.name }}
   ansible.builtin.template:
     src: ktranslate.env.j2
-    dest: "{{ anro_ktranslate_environment_dir }}/{{ anro_ktranslate_current_service_name }}.env"
+    dest: "{{ anro_ktranslate_environment_dir }}/{{ anro_ktranslate_instance.name }}.env"
     owner: root
     group: root
     mode: "0600"
-  register: anro_ktranslate_current_environment_template
+  register: anro_ktranslate_environment_template
   no_log: true
 
-- name: INSTANCE | Render systemd unit for {{ anro_ktranslate_current_service_name }}
+# The unit contains only runtime metadata and paths. External file checksums are
+# embedded as comments so a changed external file detected during a later role
+# run causes the unit to change and the service to restart deterministically.
+- name: INSTANCE | Render systemd unit for {{ anro_ktranslate_instance.name }}
   ansible.builtin.template:
     src: ktranslate.service.j2
-    dest: "{{ anro_ktranslate_systemd_dir }}/{{ anro_ktranslate_current_service_name }}.service"
+    dest: "{{ anro_ktranslate_systemd_dir }}/{{ anro_ktranslate_instance.name }}.service"
     owner: root
     group: root
     mode: "0644"
-  register: anro_ktranslate_current_unit_template
+  register: anro_ktranslate_unit_template
 
-- name: INSTANCE | Manage service state {{ anro_ktranslate_current_service_name }}
+# Restart only when role-managed runtime inputs changed. A normal converged run
+# leaves a healthy container untouched; disabled instances are explicitly stopped.
+- name: INSTANCE | Manage service state for {{ anro_ktranslate_instance.name }}
   ansible.builtin.systemd_service:
-    name: "{{ anro_ktranslate_current_service_name }}.service"
+    name: "{{ anro_ktranslate_instance.name }}.service"
     enabled: "{{ anro_ktranslate_instance.enabled | default(true) | bool }}"
-    daemon_reload: "{{ anro_ktranslate_current_unit_template.changed }}"
+    daemon_reload: "{{ anro_ktranslate_unit_template.changed }}"
     state: >-
       {{
         'restarted'
         if (
           (anro_ktranslate_instance.enabled | default(true) | bool)
           and (
-            anro_ktranslate_current_config_template.changed
-            or anro_ktranslate_current_environment_template.changed
-            or anro_ktranslate_current_unit_template.changed
+            (anro_ktranslate_managed_file_results.changed | default(false))
+            or anro_ktranslate_environment_template.changed
+            or anro_ktranslate_unit_template.changed
           )
         )
         else (

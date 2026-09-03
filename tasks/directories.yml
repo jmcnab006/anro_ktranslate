@@ -1,4 +1,6 @@
 ---
+# The root configuration directory may contain non-secret metadata and therefore
+# remains traversable; individual managed files receive explicit restrictive modes.
 - name: DIRECTORIES | Create ktranslate configuration directory
   ansible.builtin.file:
     path: "{{ anro_ktranslate_config_dir }}"
@@ -7,6 +9,8 @@
     group: root
     mode: "0755"
 
+# Environment files can contain credentials, so the directory is root-only in
+# addition to each file being written with mode 0600.
 - name: DIRECTORIES | Create ktranslate environment directory
   ansible.builtin.file:
     path: "{{ anro_ktranslate_environment_dir }}"

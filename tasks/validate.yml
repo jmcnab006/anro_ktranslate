@@ -1,32 +1,30 @@
 ---
+# Argument specs provide type validation, while these assertions enforce path,
+# naming, and cross-field constraints that argument_specs cannot express cleanly.
 - name: VALIDATE | Validate global ktranslate settings
   ansible.builtin.assert:
     that:
-      - anro_ktranslate_image is string
       - anro_ktranslate_image | length > 0
-      - anro_ktranslate_docker_binary is string
       - anro_ktranslate_docker_binary is match('^/')
-      - anro_ktranslate_systemd_dir is string
       - anro_ktranslate_systemd_dir is match('^/')
-      - anro_ktranslate_config_dir is string
       - anro_ktranslate_config_dir is match('^/')
-      - anro_ktranslate_environment_dir is string
       - anro_ktranslate_environment_dir is match('^/')
-      - anro_ktranslate_container_config_dir is string
-      - anro_ktranslate_container_config_dir is match('^/')
-      - anro_ktranslate_service_prefix is match('^[A-Za-z0-9_.@-]+$')
+      - anro_ktranslate_service_prefix is match('^[A-Za-z0-9][A-Za-z0-9_.@-]*$')
+      - anro_ktranslate_default_network | length > 0
       - anro_ktranslate_default_pull_policy in ['always', 'missing', 'never']
       - anro_ktranslate_default_restart_sec | int >= 0
       - anro_ktranslate_default_stop_timeout | int > 0
-      - anro_ktranslate_polling_instances is sequence
-      - anro_ktranslate_polling_instances is not string
-      - anro_ktranslate_discovery_instances is sequence
-      - anro_ktranslate_discovery_instances is not string
-      - anro_ktranslate_trap_instances is sequence
-      - anro_ktranslate_trap_instances is not string
+      - anro_ktranslate_default_start_limit_interval_sec | int >= 0
+      - anro_ktranslate_default_start_limit_burst | int > 0
+      - anro_ktranslate_default_command is sequence
+      - anro_ktranslate_default_command is not string
+      - anro_ktranslate_instances is sequence
+      - anro_ktranslate_instances is not string
     fail_msg: "Invalid global anro_ktranslate role configuration."
 
-- name: VALIDATE | Verify Docker CLI exists
+# Docker installation remains deliberately outside this role; fail with a clear
+# message instead of allowing generated systemd units to fail later at runtime.
+- name: VALIDATE | Inspect configured Docker CLI
   ansible.builtin.stat:
     path: "{{ anro_ktranslate_docker_binary }}"
   register: anro_ktranslate_docker_binary_stat
@@ -41,29 +39,35 @@
       Docker CLI {{ anro_ktranslate_docker_binary }} is not executable. Install
       Docker before applying anro_ktranslate or override anro_ktranslate_docker_binary.
 
-- name: VALIDATE | Validate polling instance definitions
-  ansible.builtin.include_tasks: validate_instance.yml
-  loop: "{{ anro_ktranslate_polling_instances }}"
+# Validate the default command separately because it is inherited by any
+# instance that does not provide an explicit command override.
+- name: VALIDATE | Validate default ktranslate command arguments
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - "'\n' not in item"
+      - "'\r' not in item"
+    fail_msg: "Every anro_ktranslate_default_command argument must be a single-line string."
+  loop: "{{ anro_ktranslate_default_command }}"
   loop_control:
-    loop_var: anro_ktranslate_raw_instance
-    label: "polling/{{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}"
-  vars:
-    anro_ktranslate_validation_service_type: "polling"
+    label: "{{ item }}"
 
-- name: VALIDATE | Validate discovery instance definitions
+- name: VALIDATE | Validate ktranslate instance definitions
   ansible.builtin.include_tasks: validate_instance.yml
-  loop: "{{ anro_ktranslate_discovery_instances }}"
+  loop: "{{ anro_ktranslate_instances }}"
   loop_control:
     loop_var: anro_ktranslate_raw_instance
-    label: "discovery/{{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}"
-  vars:
-    anro_ktranslate_validation_service_type: "discovery"
+    label: >-
+      {{ anro_ktranslate_raw_instance.type | default('UNKNOWN') }}/{{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}
 
-- name: VALIDATE | Validate trap instance definitions
-  ansible.builtin.include_tasks: validate_instance.yml
-  loop: "{{ anro_ktranslate_trap_instances }}"
-  loop_control:
-    loop_var: anro_ktranslate_raw_instance
-    label: "traps/{{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}"
-  vars:
-    anro_ktranslate_validation_service_type: "traps"
+# Exact instance names are the systemd unit and Docker container basenames, so
+# duplicates would cause destructive collisions even if their types differ.
+- name: VALIDATE | Assert ktranslate instance names are unique
+  ansible.builtin.assert:
+    that:
+      - >-
+        (anro_ktranslate_instances | map(attribute='name') | list | unique | length)
+        ==
+        (anro_ktranslate_instances | map(attribute='name') | list | length)
+    fail_msg: "Every anro_ktranslate_instances entry must have a unique name."
+  when: anro_ktranslate_instances | length > 0

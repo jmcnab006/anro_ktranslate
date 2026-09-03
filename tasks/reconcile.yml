@@ -1,5 +1,7 @@
 ---
-- name: RECONCILE | Find existing ktranslate systemd unit files
+# Search only the configured prefix. The embedded marker below prevents removal
+# of similarly named units that were not created by this role.
+- name: RECONCILE | Find candidate ktranslate systemd units
   ansible.builtin.find:
     paths: "{{ anro_ktranslate_systemd_dir }}"
     patterns: "{{ anro_ktranslate_service_prefix }}-*.service"
@@ -15,24 +17,29 @@
     label: "{{ item.path }}"
   register: anro_ktranslate_existing_unit_contents
 
-- name: RECONCILE | Initialize stale ktranslate service list
+- name: RECONCILE | Initialize stale service list
   ansible.builtin.set_fact:
     anro_ktranslate_stale_services: []
 
-- name: RECONCILE | Identify stale role-managed ktranslate services
+# Only a unit containing the role marker and absent from desired instance names
+# is considered stale. This is the safety boundary for destructive cleanup.
+- name: RECONCILE | Identify stale role-managed services
   ansible.builtin.set_fact:
     anro_ktranslate_stale_services: >-
-      {{ anro_ktranslate_stale_services + [item.item.path | basename | regex_replace('\.service$', '')] }}
+      {{
+        anro_ktranslate_stale_services
+        + [item.item.path | basename | regex_replace('\\.service$', '')]
+      }}
   loop: "{{ anro_ktranslate_existing_unit_contents.results }}"
   loop_control:
     label: "{{ item.item.path }}"
   when:
     - anro_ktranslate_managed_marker in (item.content | b64decode)
     - >-
-      (item.item.path | basename | regex_replace('\.service$', ''))
-      not in anro_ktranslate_desired_service_names
+      (item.item.path | basename | regex_replace('\\.service$', ''))
+      not in (anro_ktranslate_instances | map(attribute='name') | list)
 
-- name: RECONCILE | Stop and disable stale ktranslate services
+- name: RECONCILE | Stop and disable stale services
   ansible.builtin.systemd_service:
     name: "{{ item }}.service"
     state: stopped
@@ -41,7 +48,9 @@
   loop_control:
     label: "{{ item }}"
 
-- name: RECONCILE | Remove stale ktranslate containers
+# docker rm returns non-zero for an already absent container. Treat that specific
+# state as converged while preserving unexpected Docker failures.
+- name: RECONCILE | Remove stale containers
   ansible.builtin.command:
     argv:
       - "{{ anro_ktranslate_docker_binary }}"
@@ -57,7 +66,7 @@
     - anro_ktranslate_stale_container_remove.rc != 0
     - "'No such container' not in anro_ktranslate_stale_container_remove.stderr"
 
-- name: RECONCILE | Remove stale ktranslate systemd unit files
+- name: RECONCILE | Remove stale systemd unit files
   ansible.builtin.file:
     path: "{{ anro_ktranslate_systemd_dir }}/{{ item }}.service"
     state: absent
@@ -66,7 +75,7 @@
     label: "{{ item }}"
   notify: Reload systemd daemon
 
-- name: RECONCILE | Remove stale ktranslate configuration directories
+- name: RECONCILE | Remove stale managed configuration directories
   ansible.builtin.file:
     path: "{{ anro_ktranslate_config_dir }}/{{ item }}"
     state: absent
@@ -74,7 +83,7 @@
   loop_control:
     label: "{{ item }}"
 
-- name: RECONCILE | Remove stale ktranslate environment files
+- name: RECONCILE | Remove stale environment files
   ansible.builtin.file:
     path: "{{ anro_ktranslate_environment_dir }}/{{ item }}.env"
     state: absent

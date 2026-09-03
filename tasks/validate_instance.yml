@@ -1,63 +1,137 @@
 ---
-- name: VALIDATE INSTANCE | Validate instance structure {{ anro_ktranslate_validation_service_type }}
+# 'name' is intentionally the complete runtime basename. Requiring the role
+# prefix keeps reconciliation safely scoped without rebuilding names elsewhere.
+- name: VALIDATE INSTANCE | Validate base structure for {{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}
   ansible.builtin.assert:
     that:
       - anro_ktranslate_raw_instance is mapping
       - anro_ktranslate_raw_instance.name is defined
       - anro_ktranslate_raw_instance.name is string
-      - anro_ktranslate_raw_instance.name is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+      - anro_ktranslate_raw_instance.name is match('^[A-Za-z0-9][A-Za-z0-9_.@-]*$')
+      - anro_ktranslate_raw_instance.name.startswith(anro_ktranslate_service_prefix ~ '-')
+      - anro_ktranslate_raw_instance.type is defined
+      - anro_ktranslate_raw_instance.type is string
+      - anro_ktranslate_raw_instance.type is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
       - (anro_ktranslate_raw_instance.enabled | default(true)) is boolean
       - (anro_ktranslate_raw_instance.image | default(anro_ktranslate_image)) is string
       - (anro_ktranslate_raw_instance.image | default(anro_ktranslate_image)) | length > 0
       - (anro_ktranslate_raw_instance.network | default(anro_ktranslate_default_network)) is string
+      - (anro_ktranslate_raw_instance.network | default(anro_ktranslate_default_network)) | length > 0
       - (anro_ktranslate_raw_instance.pull_policy | default(anro_ktranslate_default_pull_policy)) in ['always', 'missing', 'never']
       - (anro_ktranslate_raw_instance.restart_sec | default(anro_ktranslate_default_restart_sec) | int) >= 0
       - (anro_ktranslate_raw_instance.stop_timeout | default(anro_ktranslate_default_stop_timeout) | int) > 0
-      - (anro_ktranslate_raw_instance.config | default({})) is mapping
+      - (anro_ktranslate_raw_instance.start_limit_interval_sec | default(anro_ktranslate_default_start_limit_interval_sec) | int) >= 0
+      - (anro_ktranslate_raw_instance.start_limit_burst | default(anro_ktranslate_default_start_limit_burst) | int) > 0
       - (anro_ktranslate_raw_instance.environment | default({})) is mapping
       - (anro_ktranslate_raw_instance.ports | default([])) is sequence
       - (anro_ktranslate_raw_instance.ports | default([])) is not string
+      - (anro_ktranslate_raw_instance.files | default([])) is sequence
+      - (anro_ktranslate_raw_instance.files | default([])) is not string
       - (anro_ktranslate_raw_instance.volumes | default([])) is sequence
       - (anro_ktranslate_raw_instance.volumes | default([])) is not string
       - (anro_ktranslate_raw_instance.cap_add | default([])) is sequence
       - (anro_ktranslate_raw_instance.cap_add | default([])) is not string
-      - (anro_ktranslate_raw_instance.command | default([])) is sequence
-      - (anro_ktranslate_raw_instance.command | default([])) is not string
+      - (anro_ktranslate_raw_instance.command | default(anro_ktranslate_default_command)) is sequence
+      - (anro_ktranslate_raw_instance.command | default(anro_ktranslate_default_command)) is not string
       - (anro_ktranslate_raw_instance.extra_docker_args | default([])) is sequence
       - (anro_ktranslate_raw_instance.extra_docker_args | default([])) is not string
     fail_msg: >-
-      Invalid {{ anro_ktranslate_validation_service_type }} instance definition:
-      {{ anro_ktranslate_raw_instance }}
+      Invalid ktranslate instance definition for
+      {{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}.
 
-- name: VALIDATE INSTANCE | Validate network and port compatibility for {{ anro_ktranslate_validation_service_type }}
+# Docker ignores --publish with host networking and duplicate host listeners are
+# easy to create accidentally, so reject the ambiguous combination explicitly.
+- name: VALIDATE INSTANCE | Validate network and port compatibility for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
     that:
       - >-
-        (anro_ktranslate_raw_instance.network
-          | default(anro_ktranslate_default_network)) != 'host'
+        (anro_ktranslate_raw_instance.network | default(anro_ktranslate_default_network)) != 'host'
         or
-        (anro_ktranslate_raw_instance.ports
-          | default([])
-          | length) == 0
+        (anro_ktranslate_raw_instance.ports | default([]) | length) == 0
     fail_msg: >-
-      Instance {{ anro_ktranslate_raw_instance.name }} uses Docker host
-      networking and must not define published ports. Docker --publish is not
-      applicable when the container shares the host network namespace.
+      Instance {{ anro_ktranslate_raw_instance.name }} uses Docker host networking
+      and must not define published ports.
 
-- name: VALIDATE INSTANCE | Validate environment variables {{ anro_ktranslate_validation_service_type }}
+# Newlines are rejected because Docker env-files are line-oriented. Values may
+# still contain spaces and punctuation and are passed without exposing them in
+# the world-readable systemd unit.
+- name: VALIDATE INSTANCE | Validate environment variables for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
     that:
       - item.key is match('^[A-Za-z_][A-Za-z0-9_]*$')
       - "'\n' not in (item.value | string)"
       - "'\r' not in (item.value | string)"
     fail_msg: >-
-      Environment variable {{ item.key }} for instance
-      {{ anro_ktranslate_raw_instance.name }} contains an invalid key or newline.
+      Environment variable {{ item.key }} for {{ anro_ktranslate_raw_instance.name }}
+      contains an invalid key or newline.
   loop: "{{ (anro_ktranslate_raw_instance.environment | default({})) | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
 
-- name: VALIDATE INSTANCE | Validate volume definitions {{ anro_ktranslate_validation_service_type }}
+# Managed files are rendered by this role. External files are intentionally an
+# ownership seam for a future API/Git/NetBox renderer and are mounted read-only.
+- name: VALIDATE INSTANCE | Validate file definitions for {{ anro_ktranslate_raw_instance.name }}
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.name is defined
+      - item.name is string
+      - item.name is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+      - (item.source | default('managed')) in ['managed', 'external']
+      - item.destination is defined
+      - item.destination is string
+      - item.destination is match('^/')
+      - (item.format | default('raw')) in ['raw', 'yaml', 'json']
+      - (item.mode | default('0640')) is match('^0[0-7]{3}$')
+      - (item.read_only | default(true)) is boolean
+      - (item.no_log | default(false)) is boolean
+      - >-
+        (item.source | default('managed')) != 'managed'
+        or item.content is defined
+      - >-
+        (item.source | default('managed')) != 'managed'
+        or item.host_path is not defined
+      - >-
+        (item.source | default('managed')) != 'external'
+        or (item.host_path is defined and item.host_path is string and item.host_path is match('^/'))
+      - >-
+        (item.source | default('managed')) != 'external'
+        or item.content is not defined
+      - >-
+        (item.source | default('managed')) != 'managed'
+        or (item.format | default('raw')) != 'raw'
+        or item.content is string
+      - >-
+        (item.source | default('managed')) != 'managed'
+        or (item.format | default('raw')) not in ['yaml', 'json']
+        or (item.content is mapping or (item.content is sequence and item.content is not string))
+    fail_msg: >-
+      Invalid file definition '{{ item.name | default('UNNAMED') }}' for
+      {{ anro_ktranslate_raw_instance.name }}. Managed files require content;
+      external files require an absolute host_path and must not define content.
+  loop: "{{ anro_ktranslate_raw_instance.files | default([]) }}"
+  loop_control:
+    label: "{{ item.name | default('UNNAMED') }}"
+
+# A duplicate managed filename would overwrite host content, while duplicate
+# container destinations would make mount ordering determine the active file.
+- name: VALIDATE INSTANCE | Validate file names and destinations are unique for {{ anro_ktranslate_raw_instance.name }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        (anro_ktranslate_raw_instance.files | default([]) | map(attribute='name') | list | unique | length)
+        ==
+        (anro_ktranslate_raw_instance.files | default([]) | map(attribute='name') | list | length)
+      - >-
+        (anro_ktranslate_raw_instance.files | default([]) | map(attribute='destination') | list | unique | length)
+        ==
+        (anro_ktranslate_raw_instance.files | default([]) | map(attribute='destination') | list | length)
+    fail_msg: >-
+      Instance {{ anro_ktranslate_raw_instance.name }} has duplicate file names
+      or container destinations.
+  when: anro_ktranslate_raw_instance.files | default([]) | length > 0
+
+- name: VALIDATE INSTANCE | Validate volume definitions for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
     that:
       - item is mapping
@@ -69,59 +143,63 @@
       - item.target is match('^/')
       - (item.read_only | default(false)) is boolean
     fail_msg: >-
-      Invalid volume definition for instance {{ anro_ktranslate_raw_instance.name }}:
+      Invalid volume definition for {{ anro_ktranslate_raw_instance.name }}:
       {{ item }}
   loop: "{{ anro_ktranslate_raw_instance.volumes | default([]) }}"
   loop_control:
     label: "{{ item.source | default('INVALID') }}"
 
-- name: VALIDATE INSTANCE | Validate port mappings {{ anro_ktranslate_validation_service_type }}
+# This accepts the common Docker forms used by the role, including optional host
+# address, host port, container port, and tcp/udp protocol.
+- name: VALIDATE INSTANCE | Validate port mappings for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
     that:
       - item is string
-      - item is match('^[0-9.:\[\]a-fA-F]+:[0-9]+(/(tcp|udp))?$')
+      - item is match('^[0-9.\\[\\]a-fA-F:]+:[0-9]+(/(tcp|udp))?$')
     fail_msg: >-
-      Invalid Docker port mapping '{{ item }}' for instance
-      {{ anro_ktranslate_raw_instance.name }}. Use Docker publish syntax such as
-      '8082:8082/tcp' or '162:162/udp'.
+      Invalid Docker port mapping '{{ item }}' for {{ anro_ktranslate_raw_instance.name }}.
+      Use Docker publish syntax such as '127.0.0.1:18082:8082/tcp' or '1162:1162/udp'.
   loop: "{{ anro_ktranslate_raw_instance.ports | default([]) }}"
   loop_control:
     label: "{{ item }}"
 
-- name: VALIDATE INSTANCE | Validate capability names {{ anro_ktranslate_validation_service_type }}
+- name: VALIDATE INSTANCE | Validate capability names for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
     that:
       - item is string
       - item is match('^[A-Z0-9_]+$')
     fail_msg: >-
-      Invalid Linux capability '{{ item }}' for instance
-      {{ anro_ktranslate_raw_instance.name }}.
+      Invalid Linux capability '{{ item }}' for {{ anro_ktranslate_raw_instance.name }}.
   loop: "{{ anro_ktranslate_raw_instance.cap_add | default([]) }}"
   loop_control:
     label: "{{ item }}"
 
-- name: VALIDATE INSTANCE | Validate command arguments {{ anro_ktranslate_validation_service_type }}
+# Command is authoritative for ktranslate behavior. It can completely replace
+# the Prometheus default without the role understanding upstream sink semantics.
+- name: VALIDATE INSTANCE | Validate command arguments for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
     that:
       - item is string
       - "'\n' not in item"
       - "'\r' not in item"
     fail_msg: >-
-      Command argument for instance {{ anro_ktranslate_raw_instance.name }}
-      must be a single-line string.
-  loop: "{{ anro_ktranslate_raw_instance.command | default([]) }}"
+      Command arguments for {{ anro_ktranslate_raw_instance.name }} must be
+      single-line strings.
+  loop: "{{ anro_ktranslate_raw_instance.command | default(anro_ktranslate_default_command) }}"
   loop_control:
     label: "{{ item }}"
 
-- name: VALIDATE INSTANCE | Validate extra Docker arguments {{ anro_ktranslate_validation_service_type }}
+# This is deliberately an escape hatch, not an attempt to duplicate Docker's
+# full CLI schema. Never place credentials here because unit files are readable.
+- name: VALIDATE INSTANCE | Validate extra Docker arguments for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
     that:
       - item is string
       - "'\n' not in item"
       - "'\r' not in item"
     fail_msg: >-
-      Extra Docker argument for instance {{ anro_ktranslate_raw_instance.name }}
-      must be a single-line string.
+      Extra Docker arguments for {{ anro_ktranslate_raw_instance.name }} must be
+      single-line strings.
   loop: "{{ anro_ktranslate_raw_instance.extra_docker_args | default([]) }}"
   loop_control:
     label: "{{ item }}"
