@@ -1,0 +1,83 @@
+---
+- name: Find existing ktranslate systemd unit files
+  ansible.builtin.find:
+    paths: "{{ anro_ktranslate_systemd_dir }}"
+    patterns: "{{ anro_ktranslate_service_prefix }}-*.service"
+    file_type: file
+    recurse: false
+  register: anro_ktranslate_existing_units
+
+- name: Inspect candidate ktranslate systemd units
+  ansible.builtin.slurp:
+    src: "{{ item.path }}"
+  loop: "{{ anro_ktranslate_existing_units.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: anro_ktranslate_existing_unit_contents
+
+- name: Initialize stale ktranslate service list
+  ansible.builtin.set_fact:
+    anro_ktranslate_stale_services: []
+
+- name: Identify stale role-managed ktranslate services
+  ansible.builtin.set_fact:
+    anro_ktranslate_stale_services: >-
+      {{ anro_ktranslate_stale_services + [item.item.path | basename | regex_replace('\.service$', '')] }}
+  loop: "{{ anro_ktranslate_existing_unit_contents.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  when:
+    - anro_ktranslate_managed_marker in (item.content | b64decode)
+    - >-
+      (item.item.path | basename | regex_replace('\.service$', ''))
+      not in anro_ktranslate_desired_service_names
+
+- name: Stop and disable stale ktranslate services
+  ansible.builtin.systemd_service:
+    name: "{{ item }}.service"
+    state: stopped
+    enabled: false
+  loop: "{{ anro_ktranslate_stale_services }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Remove stale ktranslate containers
+  ansible.builtin.command:
+    argv:
+      - "{{ anro_ktranslate_docker_binary }}"
+      - rm
+      - --force
+      - "{{ item }}"
+  loop: "{{ anro_ktranslate_stale_services }}"
+  loop_control:
+    label: "{{ item }}"
+  register: anro_ktranslate_stale_container_remove
+  changed_when: anro_ktranslate_stale_container_remove.rc == 0
+  failed_when:
+    - anro_ktranslate_stale_container_remove.rc != 0
+    - "'No such container' not in anro_ktranslate_stale_container_remove.stderr"
+
+- name: Remove stale ktranslate systemd unit files
+  ansible.builtin.file:
+    path: "{{ anro_ktranslate_systemd_dir }}/{{ item }}.service"
+    state: absent
+  loop: "{{ anro_ktranslate_stale_services }}"
+  loop_control:
+    label: "{{ item }}"
+  notify: Reload systemd daemon
+
+- name: Remove stale ktranslate configuration directories
+  ansible.builtin.file:
+    path: "{{ anro_ktranslate_config_dir }}/{{ item }}"
+    state: absent
+  loop: "{{ anro_ktranslate_stale_services }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Remove stale ktranslate environment files
+  ansible.builtin.file:
+    path: "{{ anro_ktranslate_environment_dir }}/{{ item }}.env"
+    state: absent
+  loop: "{{ anro_ktranslate_stale_services }}"
+  loop_control:
+    label: "{{ item }}"

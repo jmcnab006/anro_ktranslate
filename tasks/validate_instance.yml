@@ -1,0 +1,112 @@
+---
+- name: Validate instance structure {{ anro_ktranslate_validation_service_type }}
+  ansible.builtin.assert:
+    that:
+      - anro_ktranslate_raw_instance is mapping
+      - anro_ktranslate_raw_instance.name is defined
+      - anro_ktranslate_raw_instance.name is string
+      - anro_ktranslate_raw_instance.name is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+      - (anro_ktranslate_raw_instance.enabled | default(true)) is boolean
+      - (anro_ktranslate_raw_instance.image | default(anro_ktranslate_image)) is string
+      - (anro_ktranslate_raw_instance.image | default(anro_ktranslate_image)) | length > 0
+      - (anro_ktranslate_raw_instance.network | default(anro_ktranslate_default_network)) is string
+      - (anro_ktranslate_raw_instance.pull_policy | default(anro_ktranslate_default_pull_policy)) in ['always', 'missing', 'never']
+      - (anro_ktranslate_raw_instance.restart_sec | default(anro_ktranslate_default_restart_sec) | int) >= 0
+      - (anro_ktranslate_raw_instance.stop_timeout | default(anro_ktranslate_default_stop_timeout) | int) > 0
+      - (anro_ktranslate_raw_instance.config | default({})) is mapping
+      - (anro_ktranslate_raw_instance.environment | default({})) is mapping
+      - (anro_ktranslate_raw_instance.ports | default([])) is sequence
+      - (anro_ktranslate_raw_instance.ports | default([])) is not string
+      - (anro_ktranslate_raw_instance.volumes | default([])) is sequence
+      - (anro_ktranslate_raw_instance.volumes | default([])) is not string
+      - (anro_ktranslate_raw_instance.cap_add | default([])) is sequence
+      - (anro_ktranslate_raw_instance.cap_add | default([])) is not string
+      - (anro_ktranslate_raw_instance.command | default([])) is sequence
+      - (anro_ktranslate_raw_instance.command | default([])) is not string
+      - (anro_ktranslate_raw_instance.extra_docker_args | default([])) is sequence
+      - (anro_ktranslate_raw_instance.extra_docker_args | default([])) is not string
+    fail_msg: >-
+      Invalid {{ anro_ktranslate_validation_service_type }} instance definition:
+      {{ anro_ktranslate_raw_instance }}
+
+- name: Validate environment variables {{ anro_ktranslate_validation_service_type }}
+  ansible.builtin.assert:
+    that:
+      - item.key is match('^[A-Za-z_][A-Za-z0-9_]*$')
+      - "'\n' not in (item.value | string)"
+      - "'\r' not in (item.value | string)"
+    fail_msg: >-
+      Environment variable {{ item.key }} for instance
+      {{ anro_ktranslate_raw_instance.name }} contains an invalid key or newline.
+  loop: "{{ (anro_ktranslate_raw_instance.environment | default({})) | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Validate volume definitions {{ anro_ktranslate_validation_service_type }}
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.source is defined
+      - item.source is string
+      - item.source is match('^/')
+      - item.target is defined
+      - item.target is string
+      - item.target is match('^/')
+      - (item.read_only | default(false)) is boolean
+    fail_msg: >-
+      Invalid volume definition for instance {{ anro_ktranslate_raw_instance.name }}:
+      {{ item }}
+  loop: "{{ anro_ktranslate_raw_instance.volumes | default([]) }}"
+  loop_control:
+    label: "{{ item.source | default('INVALID') }}"
+
+- name: Validate port mappings {{ anro_ktranslate_validation_service_type }}
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item is match('^[0-9.:\[\]a-fA-F]+:[0-9]+(/(tcp|udp))?$')
+    fail_msg: >-
+      Invalid Docker port mapping '{{ item }}' for instance
+      {{ anro_ktranslate_raw_instance.name }}. Use Docker publish syntax such as
+      '8082:8082/tcp' or '162:162/udp'.
+  loop: "{{ anro_ktranslate_raw_instance.ports | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Validate capability names {{ anro_ktranslate_validation_service_type }}
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item is match('^[A-Z0-9_]+$')
+    fail_msg: >-
+      Invalid Linux capability '{{ item }}' for instance
+      {{ anro_ktranslate_raw_instance.name }}.
+  loop: "{{ anro_ktranslate_raw_instance.cap_add | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Validate command arguments {{ anro_ktranslate_validation_service_type }}
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - "'\n' not in item"
+      - "'\r' not in item"
+    fail_msg: >-
+      Command argument for instance {{ anro_ktranslate_raw_instance.name }}
+      must be a single-line string.
+  loop: "{{ anro_ktranslate_raw_instance.command | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Validate extra Docker arguments {{ anro_ktranslate_validation_service_type }}
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - "'\n' not in item"
+      - "'\r' not in item"
+    fail_msg: >-
+      Extra Docker argument for instance {{ anro_ktranslate_raw_instance.name }}
+      must be a single-line string.
+  loop: "{{ anro_ktranslate_raw_instance.extra_docker_args | default([]) }}"
+  loop_control:
+    label: "{{ item }}"

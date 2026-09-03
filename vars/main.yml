@@ -1,0 +1,4 @@
+---
+# Marker embedded in generated units and used to identify role-managed units
+# during reconciliation.
+anro_ktranslate_managed_marker: "Managed by Ansible role anro_ktranslate"

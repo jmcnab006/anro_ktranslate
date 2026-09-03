@@ -1,0 +1,16 @@
+---
+- name: Create ktranslate configuration directory
+  ansible.builtin.file:
+    path: "{{ anro_ktranslate_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create ktranslate environment directory
+  ansible.builtin.file:
+    path: "{{ anro_ktranslate_environment_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
