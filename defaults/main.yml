@@ -35,6 +35,11 @@ anro_ktranslate_default_command:
 # environment files when their instance names disappear from inventory.
 anro_ktranslate_reconcile: true
 
+anro_ktranslate_default_volumes:
+  - source: /etc/ktranslate
+    target: /etc/ktranslate
+    read_only: false
 # Single desired-state interface for every ktranslate container. The 'type'
 # field is descriptive metadata only; it does not select special role logic.
 anro_ktranslate_instances: []
+anro_ktranslate_snmp_config: {}

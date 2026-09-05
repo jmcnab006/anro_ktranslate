@@ -1,20 +1,19 @@
 ---
 - name: Prepare
-  hosts: all
+  hosts: ktranslate-ubuntu-2404
   become: true
+
   tasks:
-    # The target intentionally runs a real nested Docker daemon. This validates
-    # the actual systemd -> Docker lifecycle instead of a mock CLI contract.
-    - name: PREPARE | Install Docker runtime
+    - name: PREPARE | Install Docker runtime and SNMP client tools
       ansible.builtin.apt:
         name:
           - ca-certificates
+          - curl
           - docker.io
+          - snmp
         state: present
         update_cache: true
 
-    # vfs trades performance for compatibility in privileged Docker-in-Docker
-    # and avoids depending on the outer host's storage driver capabilities.
     - name: PREPARE | Create Docker configuration directory
       ansible.builtin.file:
         path: /etc/docker
@@ -23,7 +22,7 @@
         group: root
         mode: "0755"
 
-    - name: PREPARE | Configure nested Docker storage driver
+    - name: PREPARE | Configure Docker for nested Molecule execution
       ansible.builtin.copy:
         dest: /etc/docker/daemon.json
         owner: root
@@ -35,17 +34,17 @@
           }
       register: anro_ktranslate_molecule_docker_config
 
-    - name: PREPARE | Enable and start Docker
+    - name: PREPARE | Start nested Docker daemon
       ansible.builtin.systemd_service:
         name: docker.service
         enabled: true
+        daemon_reload: true
         state: >-
           {{
             'restarted'
             if anro_ktranslate_molecule_docker_config.changed
             else 'started'
           }}
-        daemon_reload: true
 
     - name: PREPARE | Wait for nested Docker daemon
       ansible.builtin.command:
@@ -54,30 +53,110 @@
           - info
       register: anro_ktranslate_molecule_docker_info
       changed_when: false
-      retries: 10
+      retries: 15
       delay: 2
       until: anro_ktranslate_molecule_docker_info.rc == 0
 
-    # Use Ubuntu throughout the lifecycle test so the nested workload matches
-    # the operating-system family used for this role's primary deployment target.
-    - name: PREPARE | Pull Ubuntu workload image
+    # A dedicated Docker network makes both the test SNMP agent and ktranslate
+    # reachable by stable container name rather than transient container IP.
+    - name: PREPARE | Check integration-test Docker network
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/docker
+          - network
+          - inspect
+          - ktranslate-molecule
+      register: anro_ktranslate_molecule_network
+      changed_when: false
+      failed_when: anro_ktranslate_molecule_network.rc not in [0, 1]
+
+    - name: PREPARE | Create integration-test Docker network
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/docker
+          - network
+          - create
+          - ktranslate-molecule
+      when: anro_ktranslate_molecule_network.rc == 1
+      changed_when: true
+
+    - name: PREPARE | Pull SNMP agent test image
       ansible.builtin.command:
         argv:
           - /usr/bin/docker
           - pull
-          - ubuntu:24.04
-      register: anro_ktranslate_molecule_image_pull
+          - polinux/snmpd:latest
+      register: anro_ktranslate_molecule_snmp_image
       changed_when: >-
-        'Downloaded newer image' in anro_ktranslate_molecule_image_pull.stdout
+        'Downloaded newer image'
+        in anro_ktranslate_molecule_snmp_image.stdout
 
-    # This file simulates configuration owned by a future API/Git/NetBox renderer.
-    # The ktranslate role must mount it without taking ownership of its contents.
-    - name: PREPARE | Create externally managed test configuration
-      ansible.builtin.copy:
-        dest: /var/lib/ktranslate-external.conf
-        owner: root
-        group: root
-        mode: "0640"
-        content: |
-          ownership=external
-          scenario=molecule
+    - name: PREPARE | Remove stale SNMP test device
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/docker
+          - rm
+          - --force
+          - molecule-snmp-device
+      register: anro_ktranslate_molecule_snmp_remove
+      changed_when: anro_ktranslate_molecule_snmp_remove.rc == 0
+      failed_when: anro_ktranslate_molecule_snmp_remove.rc not in [0, 1]
+
+    - name: PREPARE | Start generic SNMP test device
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/docker
+          - run
+          - --detach
+          - --name
+          - molecule-snmp-device
+          - --network
+          - ktranslate-molecule
+          - --publish
+          - "127.0.0.1:1161:161/udp"
+          - polinux/snmpd:latest
+      register: anro_ktranslate_molecule_snmp_start
+      changed_when: anro_ktranslate_molecule_snmp_start.rc == 0
+
+    # Test the SNMP agent independently before involving ktranslate. This makes
+    # failures attributable to either the fixture or the role under test.
+    - name: PREPARE | Wait for test device sysUpTime OID
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/snmpget
+          - -v2c
+          - -c
+          - public
+          - 127.0.0.1:1161
+          - 1.3.6.1.2.1.1.3.0
+      register: anro_ktranslate_molecule_snmp_get
+      changed_when: false
+      retries: 15
+      delay: 2
+      until: anro_ktranslate_molecule_snmp_get.rc == 0
+
+- name: Wait for Molecule support services
+  hosts: instance
+  gather_facts: false
+  tasks:
+    - name: Wait for NetBox mock API
+      ansible.builtin.uri:
+        url: http://172.29.0.20:8000/healthz
+        method: GET
+        status_code: 200
+      register: netbox_mock_health
+      until: netbox_mock_health.status == 200
+      retries: 20
+      delay: 1
+
+#    - name: Wait for router01 SNMP listener
+#      ansible.builtin.wait_for:
+#        host: 172.29.0.21
+#        port: 161
+#        timeout: 30
+
+#    - name: Wait for router02 SNMP listener
+#      ansible.builtin.wait_for:
+#        host: 172.29.0.22
+#        port: 161
+#        timeout: 30

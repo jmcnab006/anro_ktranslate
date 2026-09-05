@@ -2,129 +2,49 @@
 - name: Verify
   hosts: all
   become: true
+
   tasks:
-    - name: VERIFY | Check Docker service state
+    - name: VERIFY | Confirm ktranslate service is active
       ansible.builtin.command:
         argv:
-          - systemctl
+          - /usr/bin/systemctl
           - is-active
-          - docker.service
-      register: anro_ktranslate_verify_docker_active
+          - ktranslate-polling-molecule.service
+      register: anro_ktranslate_verify_service
       changed_when: false
+      failed_when: anro_ktranslate_verify_service.stdout != 'active'
 
-    - name: VERIFY | Check enabled ktranslate service states
+    - name: VERIFY | Confirm SNMP test device returns sysUpTime
       ansible.builtin.command:
         argv:
-          - systemctl
-          - is-active
-          - "{{ item }}.service"
-      loop:
-        - ktranslate-polling-bridge-test
-        - ktranslate-discovery-host-test
-      register: anro_ktranslate_verify_enabled_services
+          - /usr/bin/snmpget
+          - -v2c
+          - -c
+          - public
+          - 127.0.0.1:1161
+          - 1.3.6.1.2.1.1.3.0
+      register: anro_ktranslate_verify_snmp
       changed_when: false
 
-    - name: VERIFY | Check disabled ktranslate service states
-      ansible.builtin.command:
-        argv:
-          - systemctl
-          - is-active
-          - "{{ item }}.service"
-      loop:
-        - ktranslate-traps-disabled-test
-        - ktranslate-default-prometheus-test
-      register: anro_ktranslate_verify_disabled_services
-      changed_when: false
-      failed_when: false
+    - name: VERIFY | Wait for ktranslate Prometheus endpoint
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18082/metrics
+        method: GET
+        return_content: true
+        status_code: 200
+      register: anro_ktranslate_verify_prometheus
+      retries: 20
+      delay: 3
+      until:
+        - anro_ktranslate_verify_prometheus.status == 200
+        - >-
+          'sysUpTime'
+          in anro_ktranslate_verify_prometheus.content
 
-    - name: VERIFY | Inspect bridge container
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/docker
-          - inspect
-          - ktranslate-polling-bridge-test
-      register: anro_ktranslate_verify_bridge_inspect
-      changed_when: false
-
-    - name: VERIFY | Inspect host-network container
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/docker
-          - inspect
-          - ktranslate-discovery-host-test
-      register: anro_ktranslate_verify_host_inspect
-      changed_when: false
-
-    - name: VERIFY | Inspect disabled containers
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/docker
-          - inspect
-          - "{{ item }}"
-      loop:
-        - ktranslate-traps-disabled-test
-        - ktranslate-default-prometheus-test
-      register: anro_ktranslate_verify_disabled_inspect
-      changed_when: false
-      failed_when: false
-
-    - name: VERIFY | Read managed file from bridge container
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/docker
-          - exec
-          - ktranslate-polling-bridge-test
-          - cat
-          - /tmp/banner.txt
-      register: anro_ktranslate_verify_managed_file
-      changed_when: false
-
-    - name: VERIFY | Read external file from host-network container
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/docker
-          - exec
-          - ktranslate-discovery-host-test
-          - cat
-          - /tmp/external.conf
-      register: anro_ktranslate_verify_external_file
-      changed_when: false
-
-    - name: VERIFY | Read default Prometheus unit
-      ansible.builtin.slurp:
-        src: /etc/systemd/system/ktranslate-default-prometheus-test.service
-      register: anro_ktranslate_verify_default_unit
-
-    - name: VERIFY | Parse Docker inspection results
-      ansible.builtin.set_fact:
-        anro_ktranslate_verify_bridge: "{{ anro_ktranslate_verify_bridge_inspect.stdout | from_json | first }}"
-        anro_ktranslate_verify_host: "{{ anro_ktranslate_verify_host_inspect.stdout | from_json | first }}"
-        anro_ktranslate_verify_default_unit_text: "{{ anro_ktranslate_verify_default_unit.content | b64decode }}"
-
-    # Verify resulting runtime state rather than merely checking that Ansible
-    # implementation tasks completed successfully.
-    - name: VERIFY | Assert expected ktranslate runtime state
+    - name: VERIFY | Assert SNMP metric was exported
       ansible.builtin.assert:
         that:
-          - anro_ktranslate_verify_docker_active.stdout == 'active'
-          - >-
-            anro_ktranslate_verify_enabled_services.results
-            | map(attribute='stdout') | list == ['active', 'active']
-          - >-
-            anro_ktranslate_verify_disabled_services.results
-            | map(attribute='rc') | select('ne', 0) | list | length == 2
-          - anro_ktranslate_verify_bridge.State.Running
-          - anro_ktranslate_verify_bridge.HostConfig.NetworkMode == 'bridge'
-          - anro_ktranslate_verify_bridge.HostConfig.PortBindings['8082/tcp'][0].HostIp == '127.0.0.1'
-          - anro_ktranslate_verify_bridge.HostConfig.PortBindings['8082/tcp'][0].HostPort == '18082'
-          - anro_ktranslate_verify_host.State.Running
-          - anro_ktranslate_verify_host.HostConfig.NetworkMode == 'host'
-          - anro_ktranslate_verify_host.HostConfig.PortBindings in [none, {}]
-          - >-
-            anro_ktranslate_verify_disabled_inspect.results
-            | map(attribute='rc') | select('ne', 0) | list | length == 2
-          - "'managed-by=anro_ktranslate' in anro_ktranslate_verify_managed_file.stdout"
-          - "'ownership=external' in anro_ktranslate_verify_external_file.stdout"
-          - "'-format=prometheus' in anro_ktranslate_verify_default_unit_text"
-          - "'-sinks=prometheus' in anro_ktranslate_verify_default_unit_text"
-          - "'-prom_listen=:8082' in anro_ktranslate_verify_default_unit_text"
+          - "'sysUpTime' in anro_ktranslate_verify_prometheus.content"
+        fail_msg: >-
+          ktranslate did not expose the expected sysUpTime SNMP metric on its
+          Prometheus endpoint.

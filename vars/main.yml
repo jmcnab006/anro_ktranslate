@@ -2,3 +2,242 @@
 # Marker embedded in generated units and used to identify role-managed units
 # during reconciliation.
 anro_ktranslate_managed_marker: "Managed by Ansible role anro_ktranslate"
+
+_anro_ktranslate_snmp_config_defaults:
+  global:
+    poll_time_sec: 60
+    timeout_ms: 3000
+    retries: 1
+    drop_if_outside_poll: false
+    mib_profile_dir: /etc/ktranslate/profiles
+    mibs_db: /etc/ktranslate/mibs.db
+    mibs_enabled:
+      - HOST-RESOURCES-MIB
+  trap:
+    listen: "0.0.0.0:1620"
+  discovery:
+    cidrs: []
+    ports:
+      - 161
+    default_communities:
+      - public
+    add_devices: false
+    add_mibs: true
+    threads: 4
+
+# create our hidden variable.
+_anro_ktranslate_snmp_config: "{{ _anro_ktranslate_snmp_config_defaults | combine(anro_ktranslate_snmp_config) }}"
+
+
+# I'm not using this yet but keeping here for reference this is generated via `ktranslate --generate-config`
+_anro_ktranslate_config_defaults:
+  listenaddr: 127.0.0.1:8081
+  mappingfile: ""
+  udrsfile: ""
+  kmudr: ""
+  geofile: ""
+  asnfile: ""
+  applicationfile: ""
+  dns: ""
+  processingthreads: 1
+  inputthreads: 1
+  maxthreads: 1
+  format: flat_json
+  formatrollup: ""
+  formatmetric: ""
+  compression: none
+  sinks:
+    - stdout
+  maxflowspermessage: 10000
+  rollupinterval: 0
+  rollupandalpha: false
+  samplerate: 1
+  samplemin: 1
+  enablesnmpdiscovery: false
+  kentikcreds: []
+  kentikplan: 0
+  apibaseurl: https://api.kentik.com
+  grpcbaseurl: ""
+  sslcertfile: ""
+  sslkeyfile: ""
+  tagmaptype: ""
+  enableteelogs: false
+  enablehttpinput: false
+  httpremoteip: ""
+  enricherurl: ""
+  teeflow: ""
+  enrichersource: ""
+  enricherscript: ""
+  tagmapfile: ""
+  tagmapcity: ""
+  tagmapregion: ""
+  netflowformat:
+    version: ipfix
+  prometheusformat:
+    enablecollectorstats: false
+    flowsneeded: 10
+  influxdbformat:
+    measurementprefix: ""
+    namespacetoken: ':'
+  otelformat:
+    endpoint: ""
+    protocol: stdout
+    clientcert: ""
+    clientkey: ""
+    rootca: ""
+    noblockexport: false
+  redisformat:
+    redisaddr: localhost:6379
+    redispassword: ""
+    redisdb: 0
+    keyprefix: ""
+    keyttlseconds: 60
+  snmpformat:
+    configfile: ""
+  elasticformat:
+    action: index
+  prometheussink:
+    listenaddr: :8082
+    remotewriteurl: ""
+  gcloudsink:
+    bucket: ""
+    prefix: /kentik
+    contenttype: application/json
+    flushintervalseconds: 60
+  s3sink:
+    bucket: ""
+    prefix: /kentik
+    flushintervalseconds: 60
+    assumerolearn: ""
+    region: us-east-1
+    ec2instanceprofile: false
+    assumeroleorinstanceprofileintervalseconds: 900
+    checkdangling: false
+    endpoint: ""
+    signingregion: ""
+  netsink:
+    endpoint: ""
+    protocol: udp
+  newrelicsink:
+    account: ""
+    estimateonly: false
+    region: ""
+    validatejson: false
+  newrelicmultisink:
+    credmap: {}
+  filesink:
+    path: ./
+    enableimmediatewrite: false
+    flushintervalseconds: 60
+  gcloudpubsubsink:
+    projectid: ""
+    topic: ""
+  httpsink:
+    target: http://localhost:8086/write?db=kentik
+    targetlogs: http://localhost:8088/services/collector/event
+    headers: []
+    insecureskipverify: false
+    timeoutinseconds: 30
+  kafkasink:
+    topic: ""
+    bootstrapservers: ""
+    securityprotocol: PLAINTEXT
+    saslmechanism: ""
+    saslusername: ""
+    saslpassword: ""
+    kerberosservicename: kafka
+    kerberosrealm: ""
+    kerberosconfigpath: /etc/krb5.conf
+    kerberoskeytabpath: ""
+    kerberosprincipal: ""
+    kerberosdisablepafxfast: false
+    sslcafile: ""
+    sslcertfile: ""
+    sslkeyfile: ""
+    sslinsecure: false
+    requiredacks: 1
+    compression: none
+    maxmessagebytes: 1000000
+    retrymax: 3
+    flushfrequency: 100
+    flushmessages: 100
+    flushbytes: 65536
+  kentiksink:
+    relayurl: ""
+  ddogsink:
+    url: ""
+  rollup:
+    joinkey: ^
+    topk: 10
+    formats: []
+    keepundefined: false
+    maxmemorymb: 100
+    maxkeys: 5000
+    emergencycleanup: true
+  kmux:
+    dir: .
+  server:
+    servicename: ""
+    loglevel: info
+    logtostdout: false
+    metricsendpoint: none
+    metalistenaddr: localhost:0
+    ollydataset: ""
+    ollywritekey: ""
+  api:
+    devicefile: ""
+  filters: []
+  sysloginput:
+    enable: false
+    listenaddr: ""
+    enabletcp: true
+    enableudp: true
+    enableunix: false
+    format: Automatic
+    threads: 1
+  snmpinput:
+    enable: false
+    snmpfile: ""
+    dumpmibs: false
+    flowonly: false
+    jsontoyaml: ""
+    walktarget: ""
+    walkoid: .1.3.6.1.2.1
+    walkformat: ""
+    outputfile: ""
+    discoveryintervalminutes: 0
+    discoveryonstart: false
+    validatemibs: false
+    runfromwalkfile: ""
+    pollnowtarget: ""
+  gcpvpcinput:
+    enable: false
+    projectid: ""
+    subject: ""
+    samplerate: 1
+  awsvpcinput:
+    enable: false
+    iamrole: ""
+    sqsname: ""
+    regions:
+      - us-east-1
+    islambda: false
+    localfile: ""
+  flowinput:
+    enable: false
+    protocol: ""
+    listenip: 0.0.0.0
+    listenport: 9995
+    enablereuseport: false
+    workers: 2
+    queuesize: 10000
+    messagefields: |
+      TimeReceived,SamplingRate,Bytes,Packets,SrcAddr,DstAddr,Proto,SrcPort,DstPort,InIf,OutIf,SrcVlan,DstVlan,TCPFlags,SrcAS,DstAS,Type,SamplerAddress,FlowDirection
+    prometheuslistenaddr: ""
+    mappingfile: ""
+  cfgmanager:
+    configimpl: ""
+    polltimesec: 1200
+  lilo:
+    enable: false
+    buflen: 10000

@@ -14,14 +14,80 @@ platforms:
     command: "/lib/systemd/systemd"
     env:
       container: docker
+
+    docker_networks:
+      - name: ktranslate-molecule
+        ipam_config:
+          - subnet: "172.29.0.0/24"
+            gateway: "172.29.0.1"
+
+    # Expose the nested ktranslate Prometheus endpoint to the workstation.
+    # ktranslate -> Molecule host: 18082
+    # Molecule host -> workstation: 18082
+    published_ports:
+      - "127.0.0.1:18082:18082"
+
     volumes:
       - "/sys/fs/cgroup:/sys/fs/cgroup:rw"
+
     tmpfs:
       - /run
       - /tmp
+    networks:
+      - name: ktranslate-molecule
+        ipv4_address: 172.29.0.10
+
+  - name: netbox-mock
+    image: "python:3.13-alpine"
+    pre_build_image: true
+    command: "python3 /mock/server.py"
+    volumes:
+      - "${MOLECULE_SCENARIO_DIRECTORY}/files/netbox-mock:/mock:ro"
+    networks:
+      - name: ktranslate-molecule
+        ipv4_address: "172.29.0.20"
+
+#
+#  # snmp device router 1
+#  - name: snmp-router01
+#    image: tandrup/snmpsim:latest
+#    pre_build_image: true
+#    command: >-
+#      --data-dir=/snmprec
+#      --agent-udpv4-endpoint=0.0.0.0:161
+#    volumes:
+#      - ${MOLECULE_SCENARIO_DIRECTORY}/files/snmpsim/router01:/snmprec:ro
+#    networks:
+#      - name: ktranslate-molecule
+#        ipv4_address: 172.29.0.21
+#    groups:
+#      - molecule_support
+#
+#  # snmp device router 2
+#  - name: snmp-router02
+#    image: tandrup/snmpsim:latest
+#    pre_build_image: true
+#    command: >-
+#      --data-dir=/snmprec
+#      --agent-udpv4-endpoint=0.0.0.0:161
+#    volumes:
+#      - ${MOLECULE_SCENARIO_DIRECTORY}/files/snmpsim/router01:/snmprec:ro
+#    networks:
+#      - name: ktranslate-molecule
+#        ipv4_address: 172.29.0.22
+#    groups:
+#      - molecule_support
 
 provisioner:
   name: ansible
 
 verifier:
   name: ansible
+
+ansible:
+  cfg:
+    defaults:
+      deprecation_warnings: false
+      callbacks_enabled: profile_tasks
+      pipelining: true
+      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/..

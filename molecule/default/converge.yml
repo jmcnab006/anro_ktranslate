@@ -1,70 +1,93 @@
 ---
 - name: Converge
-  hosts: all
+  hosts: ktranslate-ubuntu-2404
   become: true
+
   vars:
-    anro_ktranslate_docker_binary: "/usr/bin/docker"
-    anro_ktranslate_image: "ubuntu:24.04"
+    anro_ktranslate_snmp_config:
+      discovery:
+        cidrs:
+          - 172.29.0.0/24
+        ignore_list: []
+        debug: true
+        ports:
+          - 161
+        default_communities:
+          - public
+        use_snmp_v1: false
+        default_v3: null
+        add_devices: true
+        add_mibs: true
+        threads: 12
+        replace_devices: true
+        netbox:
+          host: "http://172.29.0.20:8000"
+          token: "molecule-test-token"
+          ip_to_pick: "primary"
+      global:
+        poll_time_sec: 60
+        drop_if_outside_poll: false
+        mib_profile_dir: "/etc/ktranslate/profiles"
+        mibs_db: "/etc/ktranslate/mibs.db"
+        timeout_ms: 3000
+        retries: 0
+
+        netbox:
+          host: "http://172.29.0.20:8000"
+          token: molecule-test-token
+#          tag: ktranslate
+#          site: molecule
+          ip_to_pick: primary
+
+    sample_device_json_data: |
+      {
+        "1": {
+          "id": "1",
+          "company_id": "1",
+          "device_name": "molecule-snmp-device",
+          "device_type": "router",
+          "device_status": "V",
+          "device_description": "Molecule Net-SNMP test device",
+          "labels": [],
+          "all_interfaces": [],
+          "device_flow_type": "auto",
+          "device_sample_rate": "1",
+          "ip": "172.19.0.2",
+          "device_snmp_ip": "172.19.0.2",
+          "device_snmp_community": "public",
+          "minimize_snmp": false,
+          "device_bgp_type": "none",
+          "device_snmp_v3_conf": null
+        }
+      }
 
     anro_ktranslate_instances:
-      # Bridge instance exercises port publishing and both raw/YAML managed files.
-      - name: ktranslate-polling-bridge-test
+      - name: ktranslate-polling-molecule
         type: polling
         enabled: true
-        network: bridge
+        image: "kentik/ktranslate:latest"
+        network: ktranslate-molecule
+        # Expose ktranslate from the nested Docker daemon to the Molecule
+        # container. molecule.yml exposes the same port to the workstation.
         ports:
-          - "127.0.0.1:18082:8082/tcp"
-        environment:
-          MOLECULE_NETWORK_MODE: "bridge"
+          - "0.0.0.0:18082:8082/tcp"
+        environment: {}
+        command:
+          - "-snmp=/etc/ktranslate/snmp.yaml"
+          - "-snmp_discovery_on_start=true"
+          - "-snmp_discovery_min=5"
+          - "-format=prometheus"
+          - "-sinks=prometheus"
+          - "-prom_listen=:8082"
+
         files:
-          - name: polling.yaml
+          - name: snmp.yaml
             source: managed
-            destination: /tmp/polling.yaml
+            destination: /etc/ktranslate/snmp.yaml
+            mode: "0644"
             format: yaml
-            content:
-              molecule_test: true
-              type: polling
-          - name: banner.txt
-            source: managed
-            destination: /tmp/banner.txt
-            format: raw
-            content: |
-              managed-by=anro_ktranslate
-        command:
-          - sleep
-          - infinity
-
-      # Host-network instance proves that no Docker --publish argument is emitted
-      # and that externally owned files can be mounted through the same model.
-      - name: ktranslate-discovery-host-test
-        type: discovery
-        enabled: true
-        network: host
-        environment:
-          MOLECULE_NETWORK_MODE: "host"
-        files:
-          - name: external.conf
-            source: external
-            host_path: /var/lib/ktranslate-external.conf
-            destination: /tmp/external.conf
-        command:
-          - sleep
-          - infinity
-
-      - name: ktranslate-traps-disabled-test
-        type: traps
-        enabled: false
-        network: host
-        command:
-          - sleep
-          - infinity
-
-      # The workload image is Ubuntu, so this instance remains disabled. Its unit
-      # verifies that omission of command inherits the role's Prometheus default.
-      - name: ktranslate-default-prometheus-test
-        type: polling
-        enabled: false
-        network: bridge
+            read_only: false
+            content: "{{ _anro_ktranslate_snmp_config }}"
 
   roles:
     - role: anro_ktranslate
