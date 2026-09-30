@@ -28,7 +28,6 @@ _anro_ktranslate_snmp_config_defaults:
 # create our hidden variable.
 _anro_ktranslate_snmp_config: "{{ _anro_ktranslate_snmp_config_defaults | combine(anro_ktranslate_snmp_config) }}"
 
-
 # I'm not using this yet but keeping here for reference this is generated via `ktranslate --generate-config`
 _anro_ktranslate_config_defaults:
   listenaddr: 127.0.0.1:8081

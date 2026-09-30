@@ -62,7 +62,7 @@
       }
 
     anro_ktranslate_instances:
-      - name: ktranslate-polling-molecule
+      - name: ktranslate-polling-molecule-172.29.0.0-24
         type: polling
         enabled: true
         image: "kentik/ktranslate:latest"

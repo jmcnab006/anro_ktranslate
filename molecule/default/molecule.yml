@@ -47,36 +47,42 @@ platforms:
       - name: ktranslate-molecule
         ipv4_address: "172.29.0.20"
 
-#
-#  # snmp device router 1
-#  - name: snmp-router01
-#    image: tandrup/snmpsim:latest
-#    pre_build_image: true
-#    command: >-
-#      --data-dir=/snmprec
-#      --agent-udpv4-endpoint=0.0.0.0:161
-#    volumes:
-#      - ${MOLECULE_SCENARIO_DIRECTORY}/files/snmpsim/router01:/snmprec:ro
-#    networks:
-#      - name: ktranslate-molecule
-#        ipv4_address: 172.29.0.21
-#    groups:
-#      - molecule_support
-#
-#  # snmp device router 2
-#  - name: snmp-router02
-#    image: tandrup/snmpsim:latest
-#    pre_build_image: true
-#    command: >-
-#      --data-dir=/snmprec
-#      --agent-udpv4-endpoint=0.0.0.0:161
-#    volumes:
-#      - ${MOLECULE_SCENARIO_DIRECTORY}/files/snmpsim/router01:/snmprec:ro
-#    networks:
-#      - name: ktranslate-molecule
-#        ipv4_address: 172.29.0.22
-#    groups:
-#      - molecule_support
+  - name: snmp-router01
+    image: "tandrup/snmpsim:latest"
+    pre_build_image: true
+    override_command: false
+    command: >-
+      /usr/local/bin/snmpsimd.py
+      --process-user=snmpsim
+      --process-group=snmpsim
+      --data-dir=/snmprec
+      --agent-udpv4-endpoint=0.0.0.0:161
+    volumes:
+      - "${MOLECULE_SCENARIO_DIRECTORY}/files/snmpsim/router01/public.snmprec:/usr/local/snmpsim/data/public.snmprec:ro"
+    networks:
+      - name: ktranslate-molecule
+        ipv4_address: "172.29.0.21"
+    groups:
+      - molecule_support
+
+  - name: snmp-router02
+    image: "tandrup/snmpsim:latest"
+    pre_build_image: true
+    override_command: false
+    command: >-
+      /usr/local/bin/snmpsimd.py
+      --process-user=snmpsim
+      --process-group=snmpsim
+      --data-dir=/snmprec
+      --agent-udpv4-endpoint=0.0.0.0:161
+    volumes:
+      - "${MOLECULE_SCENARIO_DIRECTORY}/files/snmpsim/router02/public.snmprec:/usr/local/snmpsim/data/public.snmprec:ro"
+    networks:
+      - name: ktranslate-molecule
+        ipv4_address: "172.29.0.22"
+    groups:
+      - molecule_support
+
 
 provisioner:
   name: ansible
