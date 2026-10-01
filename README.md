@@ -548,7 +548,8 @@ It verifies:
 - managed raw/YAML files;
 - externally owned file mounts;
 - disabled instances;
-- inheritance of the default Prometheus command.
+- explicit polling-profile selection and keyed CLI argument merging;
+- SIGUSR2 reload of a changed managed SNMP file without replacing the container.
 
 The nested workload image is also Ubuntu 24.04 so the lifecycle test does not
 hide behavior behind a mock Docker CLI.

@@ -1,0 +1,56 @@
+---
+# Profile selection is explicit. Type remains metadata and never silently maps
+# to a profile, which keeps the source of inherited values obvious during
+# troubleshooting.
+- name: VALIDATE EFFECTIVE INSTANCE | Validate selected profile for {{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        anro_ktranslate_raw_instance.profile is not defined
+        or anro_ktranslate_raw_instance.profile in anro_ktranslate_profiles
+    fail_msg: >-
+      Instance '{{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}'
+      selects unknown profile '{{ anro_ktranslate_raw_instance.profile | default('UNDEFINED') }}'.
+
+# Build the same effective mapping used during configuration. Dictionaries merge
+# recursively while lists and scalars from later layers replace earlier values.
+# No profile-to-profile inheritance is performed.
+- name: VALIDATE EFFECTIVE INSTANCE | Normalize {{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_validation_instance: >-
+      {{
+        anro_ktranslate_instance_defaults
+        | combine(
+            anro_ktranslate_profiles[anro_ktranslate_raw_instance.profile]
+            if anro_ktranslate_raw_instance.profile is defined
+            else {},
+            recursive=true,
+            list_merge='replace'
+          )
+        | combine(anro_ktranslate_raw_instance, recursive=true, list_merge='replace')
+      }}
+
+# A raw command and keyed arguments represent two different configuration modes.
+# Rejecting their combination avoids hidden precedence and makes the generated
+# Docker command straightforward to diagnose from inventory.
+- name: VALIDATE EFFECTIVE INSTANCE | Validate CLI configuration mode for {{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (
+          anro_ktranslate_validation_instance.command is defined
+          and anro_ktranslate_validation_instance.ktranslate_args is defined
+          and anro_ktranslate_validation_instance.ktranslate_args | length > 0
+        )
+    fail_msg: >-
+      Instance '{{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}'
+      resolves both command and ktranslate_args. Use keyed ktranslate_args for
+      mergeable configuration or command as the raw escape hatch, but not both.
+
+# Reuse the complete instance validator against normalized data so inherited
+# profile/default values receive exactly the same path, port, file, and runtime
+# checks as values declared directly on an instance.
+- name: VALIDATE EFFECTIVE INSTANCE | Validate normalized instance {{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}
+  ansible.builtin.include_tasks: validate_instance.yml
+  vars:
+    anro_ktranslate_raw_instance: "{{ anro_ktranslate_validation_instance }}"

@@ -1,0 +1,76 @@
+---
+# Build one effective instance from stack-wide defaults, one explicitly selected
+# profile, and the instance itself. Profiles are independent; there is no
+# profile-to-profile inheritance or implicit selection based on workload type.
+- name: CONFIGURE INSTANCE | Normalize {{ anro_ktranslate_raw_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_instance: >-
+      {{
+        anro_ktranslate_instance_defaults
+        | combine(
+            anro_ktranslate_profiles[anro_ktranslate_raw_instance.profile]
+            if anro_ktranslate_raw_instance.profile is defined
+            else {},
+            recursive=true,
+            list_merge='replace'
+          )
+        | combine(anro_ktranslate_raw_instance, recursive=true, list_merge='replace')
+      }}
+
+# Remove null keyed arguments after merging. null is the documented operator
+# mechanism for deleting an argument supplied by a selected profile without
+# having to copy or reconstruct the profile's complete CLI configuration.
+- name: CONFIGURE INSTANCE | Initialize rendered ktranslate arguments for {{ anro_ktranslate_raw_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_rendered_command: []
+
+- name: CONFIGURE INSTANCE | Render keyed ktranslate arguments for {{ anro_ktranslate_raw_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_rendered_command: >-
+      {{
+        anro_ktranslate_rendered_command
+        + [
+            '-'
+            ~ item.key
+            ~ '='
+            ~ (
+                (item.value | string | lower)
+                if item.value is boolean
+                else (item.value | string)
+              )
+          ]
+      }}
+  loop: "{{ anro_ktranslate_instance.ktranslate_args | default({}) | dict2items | sort(attribute='key') }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.value is not none
+
+# Materialize the command consumed by the existing generic lifecycle. Raw
+# command wins only when explicitly present; otherwise keyed arguments render to
+# -key=value. Instances using neither surface retain the legacy default command.
+- name: CONFIGURE INSTANCE | Select effective command for {{ anro_ktranslate_raw_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_instance: >-
+      {{
+        anro_ktranslate_instance
+        | combine(
+            {
+              'command': (
+                anro_ktranslate_instance.command
+                if anro_ktranslate_instance.command is defined
+                else (
+                  anro_ktranslate_rendered_command
+                  if anro_ktranslate_instance.ktranslate_args is defined
+                  else anro_ktranslate_default_command
+                )
+              )
+            },
+            recursive=false
+          )
+      }}
+
+# instance.yml remains the single workload-agnostic lifecycle implementation.
+# Normalization stops here so polling, discovery, traps, and future types do not
+# grow separate Ansible execution paths.
+- name: CONFIGURE INSTANCE | Apply lifecycle for {{ anro_ktranslate_raw_instance.name }}
+  ansible.builtin.include_tasks: instance.yml

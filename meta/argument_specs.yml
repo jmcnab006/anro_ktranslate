@@ -176,7 +176,8 @@ argument_specs:
                 Instance values override same-named profile values. Set a value
                 to null to remove an argument inherited from the selected profile.
               - Values must be strings, numbers, booleans, or null.
-              - Mutually exclusive with command.
+              - Mutually exclusive with command after defaults/profile normalization.
+              - A null value removes the same-named argument inherited from the selected profile.
 
           enabled:
             type: bool

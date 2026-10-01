@@ -1,0 +1,57 @@
+---
+# Profiles are intentionally independent reusable fragments. Validate every
+# profile even when no current instance selects it so latent configuration
+# errors do not appear only when a future deployment starts using the profile.
+- name: VALIDATE PROFILE | Validate supported keys for {{ anro_ktranslate_profile_entry.key }}
+  ansible.builtin.assert:
+    that:
+      - anro_ktranslate_profile_entry.value is mapping
+      - (anro_ktranslate_profile_entry.value.ktranslate_args | default({})) is mapping
+      - >-
+        anro_ktranslate_profile_entry.value.command is not defined
+        or
+        (
+          anro_ktranslate_profile_entry.value.command is sequence
+          and anro_ktranslate_profile_entry.value.command is not string
+        )
+      - >-
+        not (
+          anro_ktranslate_profile_entry.value.command is defined
+          and anro_ktranslate_profile_entry.value.ktranslate_args is defined
+        )
+    fail_msg: >-
+      Profile '{{ anro_ktranslate_profile_entry.key }}' is invalid. command and
+      ktranslate_args are mutually exclusive, and ktranslate_args must be a mapping.
+
+# CLI argument names become upstream -key=value options. Restricting names and
+# scalar value types keeps rendering deterministic and avoids trying to encode
+# structured application configuration on the command line.
+- name: VALIDATE PROFILE | Validate keyed arguments for {{ anro_ktranslate_profile_entry.key }}
+  ansible.builtin.assert:
+    that:
+      - item.key is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+      - item.value is none or item.value is string or item.value is number or item.value is boolean
+      - item.value is none or '\n' not in (item.value | string)
+      - item.value is none or '\r' not in (item.value | string)
+    fail_msg: >-
+      Invalid ktranslate argument '{{ item.key }}' in profile
+      '{{ anro_ktranslate_profile_entry.key }}'. Values must be a string, number,
+      boolean, or null.
+  loop: "{{ anro_ktranslate_profile_entry.value.ktranslate_args | default({}) | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+# Raw command remains an escape hatch for unusual upstream modes. It is checked
+# here so an unused profile cannot carry a malformed command unnoticed.
+- name: VALIDATE PROFILE | Validate raw command for {{ anro_ktranslate_profile_entry.key }}
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - "'\n' not in item"
+      - "'\r' not in item"
+    fail_msg: >-
+      Raw command arguments in profile '{{ anro_ktranslate_profile_entry.key }}'
+      must be single-line strings.
+  loop: "{{ anro_ktranslate_profile_entry.value.command | default([]) }}"
+  loop_control:
+    label: "{{ item }}"

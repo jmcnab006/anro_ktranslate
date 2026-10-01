@@ -5,6 +5,23 @@
 
   vars:
     anro_ktranslate_snmp_config:
+      devices:
+        router01:
+          device_name: snmp-router01
+          device_ip: 172.29.0.21
+          snmp_comm: public
+          snmp_ver: "2c"
+          poll_time_sec: 60
+          timeout_ms: 3000
+          retries: 1
+        router02:
+          device_name: snmp-router02
+          device_ip: 172.29.0.22
+          snmp_comm: public
+          snmp_ver: "2c"
+          poll_time_sec: 60
+          timeout_ms: 3000
+          retries: 1
       discovery:
         cidrs:
           - 172.29.0.0/24
@@ -68,9 +85,9 @@
         enabled: true
         # Override only the arguments required by this integration scenario.
         # The remaining SNMP/Prometheus arguments are inherited from polling.
-        ktranslate_args:
-          snmp_discovery_on_start: true
-          snmp_discovery_min: 5
+#        ktranslate_args:
+#          snmp_discovery_on_start: true
+#          snmp_discovery_min: 5
         image: "kentik/ktranslate:latest"
         network: ktranslate-molecule
         # Expose ktranslate from the nested Docker daemon to the Molecule
@@ -95,17 +112,28 @@
     - role: anro_ktranslate
 
   post_tasks:
-    # Capture the running container identity before changing a signal-bound file.
-    # The second role application must preserve this ID if live reload works.
-    - name: CONVERGE | Capture polling container ID before live reload
+    # systemd starts Docker asynchronously relative to Ansible's service-state
+    # operation. Wait until Docker can inspect the named container before capturing
+    # its identity for the live-reload test. This avoids racing ExecStartPre, which
+    # removes any previous container immediately before docker run creates the new
+    # one.
+    - name: CONVERGE | Wait for polling container before live reload
       ansible.builtin.command:
         argv:
           - /usr/bin/docker
           - inspect
-          - --format={{ '{{.Id}}' }}
+          - "--format={{ '{{.Id}}' }}"
           - ktranslate-polling-molecule
-      register: anro_ktranslate_container_before_reload
+      register: _anro_ktranslate_polling_container_ready
       changed_when: false
+      retries: 10
+      delay: 2
+      until: _anro_ktranslate_polling_container_ready.rc == 0
+
+    - name: CONVERGE | Capture polling container ID before live reload
+      ansible.builtin.set_fact:
+        _anro_ktranslate_polling_container_before_reload: >-
+          {{ _anro_ktranslate_polling_container_ready.stdout }}
 
     # Change only SNMP file content. This gives Ansible a deterministic managed
     # file change while keeping systemd, environment, mounts, and command stable.
@@ -118,20 +146,30 @@
       ansible.builtin.include_role:
         name: anro_ktranslate
 
-    - name: CONVERGE | Capture polling container ID after live reload
+    # A signal reload must leave the Docker object intact. Waiting here also gives
+    # systemd enough time to expose an unintended restart/recreation before the
+    # assertion is evaluated.
+    - name: CONVERGE | Inspect polling container after live reload
       ansible.builtin.command:
         argv:
           - /usr/bin/docker
           - inspect
-          - --format={{ '{{.Id}}' }}
+          - "--format={{ '{{.Id}}' }}"
           - ktranslate-polling-molecule
-      register: anro_ktranslate_container_after_reload
+      register: _anro_ktranslate_polling_container_after_reload
       changed_when: false
+      retries: 10
+      delay: 2
+      until: _anro_ktranslate_polling_container_after_reload.rc == 0
 
-    - name: CONVERGE | Assert live reload preserved the polling container
+    - name: CONVERGE | Verify live reload preserved polling container
       ansible.builtin.assert:
         that:
-          - anro_ktranslate_container_before_reload.stdout == anro_ktranslate_container_after_reload.stdout
+          - >-
+            _anro_ktranslate_polling_container_before_reload ==
+            _anro_ktranslate_polling_container_after_reload.stdout
         fail_msg: >-
-          Signal-bound SNMP configuration change replaced the container instead
-          of reloading the running ktranslate process with SIGUSR2.
+          The polling container was recreated while applying a signal-reloadable
+          configuration change. Expected SIGUSR2 reload without container restart.
+        success_msg: >-
+          The polling container retained its Docker ID across the live reload.
