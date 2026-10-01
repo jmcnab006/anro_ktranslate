@@ -31,6 +31,68 @@ anro_ktranslate_default_command:
   - "-sinks=prometheus"
   - "-prom_listen=:8082"
 
+# Optional stack-wide instance overrides. These are merged over the role's
+# internal runtime defaults before profile and per-instance values, so callers
+# can override one key without having to restate the complete default mapping.
+anro_ktranslate_instance_defaults: {}
+
+# Workload profiles provide sensible defaults for common ktranslate deployment
+# modes. Instance configuration is merged over the selected profile, allowing
+# individual containers to override any profile-provided value.
+#
+# The polling profile provides the standard SNMP/Prometheus command line used
+# by most polling containers. Keeping this here avoids duplicating the same
+# command for every polling shard.
+# Built-in workload profiles provide production-oriented defaults for the
+# common ktranslate container roles. An instance can override any value from
+# its selected profile without requiring a separate lifecycle implementation.
+#
+# Keep these profiles focused on behavior common to nearly every instance of
+# that workload type. Site-, credential-, CIDR-, and device-specific settings
+# belong in the individual instance configuration.
+
+# Polling containers read an existing SNMP configuration and expose collected
+# metrics in Prometheus format. Device inventory files may be managed
+# independently and reloaded with SIGUSR2 without restarting the container.
+anro_ktranslate_profiles:
+  polling:
+    command:
+      - "-snmp=/etc/ktranslate/snmp.yaml"
+      - "-format=prometheus"
+      - "-sinks=prometheus"
+      - "-prom_listen=:8082"
+
+  # Discovery uses the same SNMP configuration format as polling but enables
+  # ktranslate's discovery process. Discovery-specific scope such as CIDRs,
+  # credentials, and seed configuration remains in snmp.yaml rather than being
+  # embedded in the role profile.
+  #
+  # A short discovery interval is deliberately not supplied here. Discovery
+  # frequency is an operational policy and should be configured explicitly
+  # when a deployment requires recurring discovery.
+  discovery:
+    command:
+      - "-snmp=/etc/ktranslate/snmp.yaml"
+      - "-snmp_discovery_on_start=true"
+      - "-format=prometheus"
+      - "-sinks=prometheus"
+      - "-prom_listen=:8082"
+
+  # Trap containers run the SNMP trap listener while retaining access to the
+  # SNMP device configuration. The device map allows ktranslate to associate
+  # incoming source addresses with known devices.
+  #
+  # The listener address is explicitly defined so the container accepts traps
+  # on all container interfaces. Publishing the UDP port to the host remains
+  # an instance-level concern because host networking requirements vary.
+  traps:
+    command:
+      - "-snmp=/etc/ktranslate/snmp.yaml"
+      - "-snmp_trap=:1620"
+      - "-format=prometheus"
+      - "-sinks=prometheus"
+      - "-prom_listen=:8082"
+
 # Remove role-managed units, containers, configuration directories, and
 # environment files when their instance names disappear from inventory.
 anro_ktranslate_reconcile: true

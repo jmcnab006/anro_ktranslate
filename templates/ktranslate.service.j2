@@ -1,8 +1,8 @@
 # {{ anro_ktranslate_managed_marker }}
 # Instance type is descriptive metadata: {{ anro_ktranslate_instance.type }}
 {% for external_stat in anro_ktranslate_external_file_stats.results | default([]) %}
-{% if not (external_stat.skipped | default(false) | bool) %}
-# External file checksum {{ external_stat.item.host_path }}: {{ external_stat.stat.checksum | default('unavailable') }}
+{% if not (external_stat.skipped | default(false) | bool) and (external_stat.item.reload | default('restart')) == 'restart' %}
+# Restart-bound external file checksum {{ external_stat.item.host_path }}: {{ external_stat.stat.checksum | default('unavailable') }}
 {% endif %}
 {% endfor %}
 [Unit]

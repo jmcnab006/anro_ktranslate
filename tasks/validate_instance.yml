@@ -12,6 +12,8 @@
       - anro_ktranslate_raw_instance.type is defined
       - anro_ktranslate_raw_instance.type is string
       - anro_ktranslate_raw_instance.type is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+      - (anro_ktranslate_raw_instance.profile | default(anro_ktranslate_raw_instance.type)) is string
+      - (anro_ktranslate_raw_instance.profile | default(anro_ktranslate_raw_instance.type)) is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
       - (anro_ktranslate_raw_instance.enabled | default(true)) is boolean
       - (anro_ktranslate_raw_instance.image | default(anro_ktranslate_image)) is string
       - (anro_ktranslate_raw_instance.image | default(anro_ktranslate_image)) | length > 0
@@ -85,6 +87,9 @@
       - (item.mode | default('0640')) is match('^0[0-7]{3}$')
       - (item.read_only | default(true)) is boolean
       - (item.no_log | default(false)) is boolean
+      - (item.reload | default('restart')) in ['restart', 'signal']
+      - (item.reload_signal | default('USR2')) is string
+      - (item.reload_signal | default('USR2')) is match('^[A-Z0-9]+$')
       - >-
         (item.source | default('managed')) != 'managed'
         or item.content is defined
@@ -109,6 +114,7 @@
       Invalid file definition '{{ item.name | default('UNNAMED') }}' for
       {{ anro_ktranslate_raw_instance.name }}. Managed files require content;
       external files require an absolute host_path and must not define content.
+      reload must be restart or signal; signal files default to USR2.
   loop: "{{ anro_ktranslate_raw_instance.files | default([]) }}"
   loop_control:
     label: "{{ item.name | default('UNNAMED') }}"

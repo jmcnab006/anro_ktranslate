@@ -61,6 +61,11 @@
         }
       }
 
+    # Override the built-in polling profile only to enable discovery behavior
+    # required by this integration scenario. The instance intentionally omits
+    # command so Molecule proves profile inheritance works end to end.
+    anro_ktranslate_profiles:
+      polling:
     anro_ktranslate_instances:
       - name: ktranslate-polling-molecule
         type: polling
@@ -72,14 +77,6 @@
         ports:
           - "0.0.0.0:18082:8082/tcp"
         environment: {}
-        command:
-          - "-snmp=/etc/ktranslate/snmp.yaml"
-          - "-snmp_discovery_on_start=true"
-          - "-snmp_discovery_min=5"
-          - "-format=prometheus"
-          - "-sinks=prometheus"
-          - "-prom_listen=:8082"
-
         files:
           - name: snmp.yaml
             source: managed
@@ -88,6 +85,52 @@
             format: yaml
             read_only: false
             content: "{{ _anro_ktranslate_snmp_config }}"
+            # ktranslate rereads SNMP device configuration on SIGUSR2. This
+            # change must not replace the running container.
+            reload: signal
+            reload_signal: USR2
 
   roles:
     - role: anro_ktranslate
+
+  post_tasks:
+    # Capture the running container identity before changing a signal-bound file.
+    # The second role application must preserve this ID if live reload works.
+    - name: CONVERGE | Capture polling container ID before live reload
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/docker
+          - inspect
+          - --format={{ '{{.Id}}' }}
+          - ktranslate-polling-molecule
+      register: anro_ktranslate_container_before_reload
+      changed_when: false
+
+    # Change only SNMP file content. This gives Ansible a deterministic managed
+    # file change while keeping systemd, environment, mounts, and command stable.
+    - name: CONVERGE | Change signal-bound SNMP configuration
+      ansible.builtin.set_fact:
+        anro_ktranslate_snmp_config: >-
+          {{ anro_ktranslate_snmp_config | combine({'global': {'poll_time_sec': 61}}, recursive=true) }}
+
+    - name: CONVERGE | Reapply role to exercise live reload
+      ansible.builtin.include_role:
+        name: anro_ktranslate
+
+    - name: CONVERGE | Capture polling container ID after live reload
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/docker
+          - inspect
+          - --format={{ '{{.Id}}' }}
+          - ktranslate-polling-molecule
+      register: anro_ktranslate_container_after_reload
+      changed_when: false
+
+    - name: CONVERGE | Assert live reload preserved the polling container
+      ansible.builtin.assert:
+        that:
+          - anro_ktranslate_container_before_reload.stdout == anro_ktranslate_container_after_reload.stdout
+        fail_msg: >-
+          Signal-bound SNMP configuration change replaced the container instead
+          of reloading the running ktranslate process with SIGUSR2.

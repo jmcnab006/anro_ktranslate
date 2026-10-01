@@ -1,12 +1,15 @@
 ---
-# The instance name is already the complete service/container basename. Keeping
-# one canonical name prevents the double-prefix bugs that normalization caused.
+# The normalized instance name is the complete service/container basename. A
+# single canonical name prevents systemd, Docker, and configuration paths from
+# drifting apart as profiles are introduced.
 - name: INSTANCE | Set derived paths for {{ anro_ktranslate_instance.name }}
   ansible.builtin.set_fact:
     anro_ktranslate_current_config_dir: "{{ anro_ktranslate_config_dir }}/{{ anro_ktranslate_instance.name }}"
+    anro_ktranslate_external_signal_state_file: >-
+      {{ anro_ktranslate_config_dir }}/{{ anro_ktranslate_instance.name }}/.external-signal-checksums.yml
 
-# Create the per-instance directory even when only external files are mounted;
-# this gives operators a predictable location for role-owned instance artifacts.
+# The per-instance directory stores role-managed configuration and the private
+# checksum state used to detect externally owned reloadable file changes.
 - name: INSTANCE | Create configuration directory for {{ anro_ktranslate_instance.name }}
   ansible.builtin.file:
     path: "{{ anro_ktranslate_current_config_dir }}"
@@ -15,21 +18,22 @@
     group: root
     mode: "0750"
 
-# Reconcile files inside the role-owned instance directory. External files live
-# elsewhere and are never removed by this role.
+# Only declared managed files participate in file reconciliation. External files
+# are owned by another renderer and the hidden checksum state is role metadata,
+# so neither is removed by this managed-file cleanup.
 - name: INSTANCE | Build desired managed file list for {{ anro_ktranslate_instance.name }}
   ansible.builtin.set_fact:
     anro_ktranslate_desired_managed_file_names: >-
       {{
         (
-          anro_ktranslate_instance.files | default([])
+          anro_ktranslate_instance.files
           | selectattr('source', 'undefined')
           | map(attribute='name')
           | list
         )
         +
         (
-          anro_ktranslate_instance.files | default([])
+          anro_ktranslate_instance.files
           | selectattr('source', 'defined')
           | selectattr('source', 'equalto', 'managed')
           | map(attribute='name')
@@ -37,13 +41,18 @@
         )
       }}
 
+# Hidden files are intentionally excluded so .external-signal-checksums.yml is
+# lifecycle metadata rather than an application configuration artifact.
 - name: INSTANCE | Find existing managed files for {{ anro_ktranslate_instance.name }}
   ansible.builtin.find:
     paths: "{{ anro_ktranslate_current_config_dir }}"
     file_type: file
     recurse: false
+    hidden: false
   register: anro_ktranslate_existing_managed_files
 
+# Removing a previously mounted managed file changes container mount topology.
+# Treat this as restart-bound even if the removed file used signal reloads.
 - name: INSTANCE | Remove obsolete managed files for {{ anro_ktranslate_instance.name }}
   ansible.builtin.file:
     path: "{{ item.path }}"
@@ -54,9 +63,9 @@
   when: (item.path | basename) not in anro_ktranslate_desired_managed_file_names
   register: anro_ktranslate_obsolete_managed_files
 
-# Render only files whose source is 'managed'. Raw content is copied verbatim;
-# YAML and JSON content are serialized from inventory data without requiring a
-# ktranslate-specific Ansible schema.
+# Render only files owned by Ansible. reload=restart preserves the traditional
+# behavior; reload=signal allows device inventory changes to be consumed by a
+# running ktranslate process without replacing its container.
 - name: INSTANCE | Render managed files for {{ anro_ktranslate_instance.name }}
   ansible.builtin.copy:
     dest: "{{ anro_ktranslate_current_config_dir }}/{{ item.name }}"
@@ -73,25 +82,29 @@
           else item.content | to_nice_yaml(indent=2, sort_keys=false)
         )
       }}
-  loop: "{{ anro_ktranslate_instance.files | default([]) }}"
+  loop: "{{ anro_ktranslate_instance.files }}"
   loop_control:
     label: "{{ item.name }}"
   when: (item.source | default('managed')) == 'managed'
   register: anro_ktranslate_managed_file_results
   no_log: "{{ item.no_log | default(false) | bool }}"
 
-# Fail before systemd/Docker if an externally owned configuration file is absent.
-# A future renderer can own these paths without changing this role's file model.
+# External files are never modified by this role. Checksums serve two purposes:
+# restart-bound files are embedded into the unit; signal-bound files are compared
+# with private state from the previous successful converge.
 - name: INSTANCE | Inspect external files for {{ anro_ktranslate_instance.name }}
   ansible.builtin.stat:
     path: "{{ item.host_path }}"
     get_checksum: true
-  loop: "{{ anro_ktranslate_instance.files | default([]) }}"
+  loop: "{{ anro_ktranslate_instance.files }}"
   loop_control:
     label: "{{ item.host_path | default(item.name) }}"
   when: (item.source | default('managed')) == 'external'
   register: anro_ktranslate_external_file_stats
 
+# Fail before systemd/Docker when an external producer has not created its file.
+# This gives the producing pipeline a deterministic failure instead of allowing
+# Docker to fail later with an invalid bind mount.
 - name: INSTANCE | Assert external files exist for {{ anro_ktranslate_instance.name }}
   ansible.builtin.assert:
     that:
@@ -105,8 +118,54 @@
     label: "{{ item.item.host_path | default('UNKNOWN') }}"
   when: not (item.skipped | default(false) | bool)
 
-# Environment files are always present, including for an empty environment,
-# which keeps the systemd command stable and avoids conditional --env-file logic.
+# Read the last successfully applied checksums for signal-bound external files.
+# Missing state is normal on first deployment and deliberately does not cause a
+# signal because the container will consume current files when it starts.
+- name: INSTANCE | Inspect external signal checksum state for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.stat:
+    path: "{{ anro_ktranslate_external_signal_state_file }}"
+  register: anro_ktranslate_external_signal_state_stat
+
+- name: INSTANCE | Read external signal checksum state for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.slurp:
+    src: "{{ anro_ktranslate_external_signal_state_file }}"
+  register: anro_ktranslate_external_signal_state_slurp
+  when: anro_ktranslate_external_signal_state_stat.stat.exists
+  no_log: true
+
+# Decode state into a mapping keyed by host path. The file contains checksums
+# only, but no_log avoids exposing internal filesystem inventory unnecessarily.
+- name: INSTANCE | Initialize external signal checksum state for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_previous_external_signal_checksums: >-
+      {{
+        (anro_ktranslate_external_signal_state_slurp.content | b64decode | from_yaml)
+        if anro_ktranslate_external_signal_state_stat.stat.exists
+        else {}
+      }}
+    anro_ktranslate_current_external_signal_checksums: {}
+  no_log: true
+
+# Build current checksum state only for external files configured for live signal
+# reload. Restart-bound external checksums remain represented in the unit file.
+- name: INSTANCE | Build current external signal checksum state for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_current_external_signal_checksums: >-
+      {{
+        anro_ktranslate_current_external_signal_checksums
+        | combine({item.item.host_path: item.stat.checksum})
+      }}
+  loop: "{{ anro_ktranslate_external_file_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.host_path | default('SKIPPED') }}"
+  when:
+    - not (item.skipped | default(false) | bool)
+    - (item.item.reload | default('restart')) == 'signal'
+  no_log: true
+
+# Environment files always exist, including for an empty environment, which
+# keeps the generated Docker invocation stable and protects environment secrets
+# with root-only permissions.
 - name: INSTANCE | Render environment file for {{ anro_ktranslate_instance.name }}
   ansible.builtin.template:
     src: ktranslate.env.j2
@@ -117,9 +176,9 @@
   register: anro_ktranslate_environment_template
   no_log: true
 
-# The unit contains only runtime metadata and paths. External file checksums are
-# embedded as comments so a changed external file detected during a later role
-# run causes the unit to change and the service to restart deterministically.
+# The unit includes checksums only for restart-bound external files. Signal-bound
+# files must not alter the unit or systemd would restart the container before a
+# live reload can occur.
 - name: INSTANCE | Render systemd unit for {{ anro_ktranslate_instance.name }}
   ansible.builtin.template:
     src: ktranslate.service.j2
@@ -129,27 +188,118 @@
     mode: "0644"
   register: anro_ktranslate_unit_template
 
-# Restart only when role-managed runtime inputs changed. A normal converged run
-# leaves a healthy container untouched; disabled instances are explicitly stopped.
+# Determine whether any managed file explicitly requires a restart. Registered
+# loop results retain the original file definition under item, allowing restart
+# and signal semantics to coexist within one instance.
+- name: INSTANCE | Determine restart-bound managed file changes for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_restart_managed_files_changed: >-
+      {{
+        anro_ktranslate_managed_file_results.results
+        | selectattr('changed', 'defined')
+        | selectattr('changed', 'equalto', true)
+        | selectattr('item.reload', 'undefined')
+        | list
+        | length > 0
+        or
+        anro_ktranslate_managed_file_results.results
+        | selectattr('changed', 'defined')
+        | selectattr('changed', 'equalto', true)
+        | selectattr('item.reload', 'defined')
+        | selectattr('item.reload', 'equalto', 'restart')
+        | list
+        | length > 0
+      }}
+
+# Consolidate all conditions that require container replacement. Live reload is
+# suppressed when a restart occurs because the newly started process already
+# reads the latest mounted files.
+- name: INSTANCE | Determine restart requirement for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_instance_restart_required: >-
+      {{
+        anro_ktranslate_restart_managed_files_changed
+        or (anro_ktranslate_obsolete_managed_files.changed | default(false))
+        or anro_ktranslate_environment_template.changed
+        or anro_ktranslate_unit_template.changed
+      }}
+
+# A converged run leaves the container untouched. Configuration that cannot be
+# reloaded safely causes a restart, while disabled instances are stopped and
+# disabled without special workload-specific code.
 - name: INSTANCE | Manage service state for {{ anro_ktranslate_instance.name }}
   ansible.builtin.systemd_service:
     name: "{{ anro_ktranslate_instance.name }}.service"
-    enabled: "{{ anro_ktranslate_instance.enabled | default(true) | bool }}"
+    enabled: "{{ anro_ktranslate_instance.enabled | bool }}"
     daemon_reload: "{{ anro_ktranslate_unit_template.changed }}"
     state: >-
       {{
         'restarted'
-        if (
-          (anro_ktranslate_instance.enabled | default(true) | bool)
-          and (
-            (anro_ktranslate_managed_file_results.changed | default(false))
-            or anro_ktranslate_environment_template.changed
-            or anro_ktranslate_unit_template.changed
-          )
-        )
-        else (
-          'started'
-          if (anro_ktranslate_instance.enabled | default(true) | bool)
-          else 'stopped'
-        )
+        if (anro_ktranslate_instance.enabled | bool and anro_ktranslate_instance_restart_required)
+        else ('started' if anro_ktranslate_instance.enabled | bool else 'stopped')
       }}
+
+# Collect signals required by changed managed files. ktranslate's supported SNMP
+# device reload uses USR2, while reload_signal remains configurable for future
+# workloads that expose a different signal-based reload contract.
+- name: INSTANCE | Initialize live reload signals for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_live_reload_signals: []
+
+- name: INSTANCE | Collect managed file live reload signals for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_live_reload_signals: >-
+      {{ anro_ktranslate_live_reload_signals + [item.item.reload_signal | default('USR2')] }}
+  loop: "{{ anro_ktranslate_managed_file_results.results }}"
+  loop_control:
+    label: "{{ item.item.name | default('SKIPPED') }}"
+  when:
+    - item.changed | default(false) | bool
+    - (item.item.reload | default('restart')) == 'signal'
+
+# External signal files are considered changed only after a prior successful
+# checksum exists. This prevents a redundant signal immediately after the first
+# service start while still detecting renderer changes on later role runs.
+- name: INSTANCE | Collect external file live reload signals for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_live_reload_signals: >-
+      {{ anro_ktranslate_live_reload_signals + [item.item.reload_signal | default('USR2')] }}
+  loop: "{{ anro_ktranslate_external_file_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.host_path | default('SKIPPED') }}"
+  when:
+    - not (item.skipped | default(false) | bool)
+    - (item.item.reload | default('restart')) == 'signal'
+    - item.item.host_path in anro_ktranslate_previous_external_signal_checksums
+    - anro_ktranslate_previous_external_signal_checksums[item.item.host_path] != item.stat.checksum
+
+# Send each requested signal once after systemd has reconciled service state.
+# Never signal after a restart, and never signal a disabled instance. command is
+# appropriate because Docker exposes signaling as an imperative runtime action.
+- name: INSTANCE | Reload changed dynamic files for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.command:
+    argv:
+      - "{{ anro_ktranslate_docker_binary }}"
+      - kill
+      - --signal
+      - "{{ item }}"
+      - "{{ anro_ktranslate_instance.name }}"
+  loop: "{{ anro_ktranslate_live_reload_signals | unique }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: true
+  when:
+    - anro_ktranslate_instance.enabled | bool
+    - not anro_ktranslate_instance_restart_required
+
+# Persist external signal-file checksums only after service reconciliation and
+# live reload succeed. If signaling fails, state remains old so the next converge
+# retries the reload instead of incorrectly considering the change applied.
+- name: INSTANCE | Persist external signal checksum state for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.copy:
+    dest: "{{ anro_ktranslate_external_signal_state_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+    content: "{{ anro_ktranslate_current_external_signal_checksums | to_nice_yaml(indent=2, sort_keys=true) }}"
+  no_log: true

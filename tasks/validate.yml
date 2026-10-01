@@ -18,6 +18,8 @@
       - anro_ktranslate_default_start_limit_burst | int > 0
       - anro_ktranslate_default_command is sequence
       - anro_ktranslate_default_command is not string
+      - anro_ktranslate_instance_defaults is mapping
+      - anro_ktranslate_profiles is mapping
       - anro_ktranslate_instances is sequence
       - anro_ktranslate_instances is not string
     fail_msg: "Invalid global anro_ktranslate role configuration."
@@ -52,8 +54,28 @@
   loop_control:
     label: "{{ item }}"
 
+# Profiles must be mappings because normalization merges the selected profile
+# into the instance definition. A null profile commonly indicates an empty YAML
+# key such as "polling:" and cannot be safely normalized.
+- name: VALIDATE | Validate ktranslate profile definitions
+  ansible.builtin.assert:
+    that:
+      - item.key is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+      - item.value is not none
+      - item.value is mapping
+    fail_msg: >-
+      Invalid ktranslate profile '{{ item.key }}'.
+      Each profile must contain a YAML mapping of instance defaults.
+      Received {{ item.value | type_debug }} instead.
+      Check for an empty profile definition such as '{{ item.key }}:'.
+  loop: "{{ anro_ktranslate_profiles | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+# Raw instances are normalized before detailed validation so values inherited
+# from profiles receive the same validation as values written on the instance.
 - name: VALIDATE | Validate ktranslate instance definitions
-  ansible.builtin.include_tasks: validate_instance.yml
+  ansible.builtin.include_tasks: validate_effective_instance.yml
   loop: "{{ anro_ktranslate_instances }}"
   loop_control:
     loop_var: anro_ktranslate_raw_instance

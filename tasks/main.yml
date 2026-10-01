@@ -13,11 +13,11 @@
   ansible.builtin.import_tasks: reconcile.yml
   when: anro_ktranslate_reconcile | bool
 
-# Every workload follows the same lifecycle. The instance 'type' is metadata,
-# which keeps future polling, discovery, trap, flow, or other modes role-agnostic.
-- name: MAIN | Configure desired ktranslate instances
-  ansible.builtin.include_tasks: instance.yml
+# Normalize each raw declaration before lifecycle processing. Profiles only
+# supply defaults; every workload still follows the same generic instance code.
+- name: MAIN | Normalize and configure desired ktranslate instances
+  ansible.builtin.include_tasks: configure_instance.yml
   loop: "{{ anro_ktranslate_instances }}"
   loop_control:
-    loop_var: anro_ktranslate_instance
-    label: "{{ anro_ktranslate_instance.type }}/{{ anro_ktranslate_instance.name }}"
+    loop_var: anro_ktranslate_raw_instance
+    label: "{{ anro_ktranslate_raw_instance.type }}/{{ anro_ktranslate_raw_instance.name }}"

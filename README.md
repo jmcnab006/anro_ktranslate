@@ -20,9 +20,23 @@ anro_ktranslate_instances: []
 ```
 
 There are no separate polling, discovery, or trap arrays. Every container uses
-the same lifecycle code and carries a `type` field only as descriptive metadata.
-This avoids rebuilding names and removes role changes when a new workload type
-is introduced.
+the same lifecycle code. `type` remains descriptive workload metadata and, by
+default, also selects a same-named reusable profile. An explicit `profile` can
+select a different profile without changing the workload classification.
+
+Effective instance configuration uses deterministic shallow merge precedence:
+
+```text
+anro_ktranslate_instance_defaults
+              <
+anro_ktranslate_profiles[profile or type]
+              <
+explicit anro_ktranslate_instances entry
+```
+
+Lists such as `command`, `files`, `ports`, and `volumes` are **replaced**, not
+appended. This makes an instance override authoritative and avoids hidden list
+ordering behavior.
 
 For every instance, `name` is the single canonical runtime name:
 
@@ -92,6 +106,17 @@ anro_ktranslate_default_command:
   - "-sinks=prometheus"
   - "-prom_listen=:8082"
 
+# Optional stack-wide overrides; empty by default.
+anro_ktranslate_instance_defaults: {}
+
+anro_ktranslate_profiles:
+  polling:
+    command:
+      - "-snmp=/etc/ktranslate/snmp.yaml"
+      - "-format=prometheus"
+      - "-sinks=prometheus"
+      - "-prom_listen=:8082"
+
 anro_ktranslate_reconcile: true
 anro_ktranslate_instances: []
 ```
@@ -134,6 +159,66 @@ anro_ktranslate_instances:
 
 `command: []` is an explicit empty command. To inherit the Prometheus default,
 omit the `command` key entirely.
+
+## Profiles and normalized defaults
+
+Profiles are convenience defaults, not separate lifecycle implementations. The
+built-in `polling` profile removes the repeated SNMP/Prometheus CLI boilerplate
+from normal polling instances:
+
+```yaml
+anro_ktranslate_instances:
+  - name: ktranslate-poll-router-001
+    type: polling
+    ports:
+      - "127.0.0.1:18082:8082/tcp"
+    files:
+      - name: snmp.yaml
+        source: managed
+        destination: /etc/ktranslate/snmp.yaml
+        format: yaml
+        content: "{{ router_001_snmp_config }}"
+```
+
+Because `type: polling` selects the built-in `polling` profile, the instance
+inherits:
+
+```yaml
+command:
+  - "-snmp=/etc/ktranslate/snmp.yaml"
+  - "-format=prometheus"
+  - "-sinks=prometheus"
+  - "-prom_listen=:8082"
+```
+
+Define deployment-specific profiles to standardize vendor, credential boundary,
+listener, or shard behavior without changing role code:
+
+```yaml
+anro_ktranslate_profiles:
+  polling:
+    command:
+      - "-snmp=/etc/ktranslate/snmp.yaml"
+      - "-format=prometheus"
+      - "-sinks=prometheus"
+      - "-prom_listen=:8082"
+
+  polling_slow:
+    command:
+      - "-snmp=/etc/ktranslate/snmp.yaml"
+      - "-format=prometheus"
+      - "-sinks=prometheus"
+      - "-prom_listen=:8082"
+      # Add only flags supported by the pinned ktranslate version.
+
+anro_ktranslate_instances:
+  - name: ktranslate-poll-special-001
+    type: polling
+    profile: polling_slow
+```
+
+An instance may override any profile key. Because normalization is shallow, an
+explicit `command` or `files` list replaces the profile list completely.
 
 ## Managed files
 
@@ -210,11 +295,20 @@ anro_ktranslate_instances:
 The external host file must exist when this role converges. Failing early is
 intentional: otherwise Docker would fail later with an invalid bind mount.
 
-The role records the external file checksum in a comment in the generated unit.
-If the external file changes before a later Ansible run, the unit changes and
-the service is restarted. If a separate renderer updates configuration between
-Ansible runs, that renderer remains responsible for triggering whatever reload
-or restart behavior ktranslate requires.
+By default, the role records the external file checksum in a comment in the
+generated unit. If the external file changes before a later Ansible run, the
+unit changes and the service is restarted.
+
+For dynamic device inventory, set `reload: signal`. Signal-bound external files
+are deliberately excluded from the systemd checksum comments. The role stores
+their last successfully applied checksums in a root-only state file under the
+instance configuration directory. On a later converge, a changed checksum sends
+the configured signal without replacing the container. State is persisted only
+after the reload succeeds so a failed signal is retried on the next run.
+
+A renderer that updates an external file between Ansible runs may also send the
+same signal immediately; otherwise the role detects and reloads it on the next
+Ansible converge.
 
 This model supports a future architecture without adding API/authentication logic
 to this role:
@@ -234,6 +328,78 @@ Git / API / NetBox / URL
           v
  ktranslate container
 ```
+
+## Dynamic device files and live reload
+
+ktranslate can reload SNMP device inventory in a running container when it
+receives `SIGUSR2`. Use `reload: signal` for files whose contents can change
+without changing container topology or static runtime configuration.
+
+### Ansible-managed dynamic device file
+
+```yaml
+anro_ktranslate_instances:
+  - name: ktranslate-poll-router-001
+    type: polling
+    files:
+      - name: snmp.yaml
+        source: managed
+        destination: /etc/ktranslate/snmp.yaml
+        format: yaml
+        content: "{{ router_001_devices }}"
+        reload: signal
+        reload_signal: USR2
+```
+
+When the rendered content changes, the role keeps the existing container and
+runs the equivalent of:
+
+```text
+docker kill --signal USR2 ktranslate-poll-router-001
+```
+
+### Externally owned dynamic device file
+
+Use this when Git/CI, a discovery classifier, NetBox integration, or another
+renderer owns the device file:
+
+```yaml
+anro_ktranslate_instances:
+  - name: ktranslate-poll-router-001
+    type: polling
+    files:
+      - name: snmp.yaml
+        source: external
+        host_path: /var/lib/ktranslate/devices/router-001.yaml
+        destination: /etc/ktranslate/snmp.yaml
+        read_only: true
+        reload: signal
+        reload_signal: USR2
+```
+
+The external producer owns `/var/lib/ktranslate/devices/router-001.yaml`; this
+role only validates, mounts, fingerprints, and reloads it. The role never edits
+or deletes externally owned files.
+
+Use `reload: restart` (the default) for configuration changes that require a new
+process, mount topology changes, profile/MIB changes whose live-reload behavior
+is not documented, or any file where signal safety is uncertain.
+
+### Restart versus signal behavior
+
+| Change | Result |
+| --- | --- |
+| Managed file with `reload: restart` changes | Container restart |
+| External file with `reload: restart` checksum changes | Unit changes; container restart |
+| Managed file with `reload: signal` changes | Signal running container |
+| External file with `reload: signal` checksum changes | Signal running container |
+| Managed file is removed from desired state | Container restart |
+| Environment or systemd runtime changes | Container restart |
+| First deployment | Container starts with current files; no redundant signal |
+
+If a restart and signal-bound file change occur in the same converge, the
+restart wins and the signal is suppressed because the new process already reads
+the current files.
 
 ## Network modes
 
@@ -299,6 +465,37 @@ only when both conditions are true:
 Stale units are stopped and disabled, stale containers are removed, and their
 role-managed unit/config/environment artifacts are deleted. External files are
 never deleted by this role.
+
+## Recommended production workflow
+
+A scalable deployment should keep discovery, approval/classification, and
+polling assignment separate from this role's container lifecycle:
+
+```text
+Discovery shards
+      |
+      v
+Candidate devices
+      |
+      v
+Classification / approval / Git PR
+      |
+      v
+Approved device inventory
+      |
+      v
+Shard renderer
+      |
+      +--> router-001.yaml --> ktranslate-poll-router-001 --USR2-->
+      +--> router-002.yaml --> ktranslate-poll-router-002 --USR2-->
+      +--> switch-001.yaml --> ktranslate-poll-switch-001 --USR2-->
+```
+
+Use stable poller names rather than CIDRs in service names. Device assignments
+can then move between shard files without renaming systemd services or Docker
+containers. CPU, memory, restart/OOM, poll duration, and device-count metrics can
+inform when inventory automation should split a shard; the role should continue
+to deploy declared desired state rather than making autonomous scaling decisions.
 
 ## Security
 

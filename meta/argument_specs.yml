@@ -106,6 +106,23 @@ argument_specs:
             An instance command replaces this list completely, allowing any
             ktranslate-supported format, sink, input mode, or other CLI option.
 
+      anro_ktranslate_instance_defaults:
+        type: dict
+        description:
+          - >-
+            Base instance values merged before profile and per-instance values.
+            Override only keys that should apply to every container.
+          - >-
+            Merge precedence is instance defaults, selected profile, then the
+            explicit instance. Lists are replaced rather than appended.
+
+      anro_ktranslate_profiles:
+        type: dict
+        description:
+          - Defines reusable instance defaults keyed by profile name.
+          - Role defaults provide the standard polling profile.
+          - Explicit instance configuration overrides values inherited from a profile.
+
       anro_ktranslate_reconcile:
         type: bool
         default: true
@@ -137,7 +154,18 @@ argument_specs:
             description:
               - >-
                 Descriptive workload classification such as polling, discovery,
-                traps, flow, or syslog. The role does not special-case this value.
+                traps, flow, or syslog. When profile is omitted, type also selects
+                a same-named profile if one exists.
+
+          profile:
+            type: str
+            description:
+              - >-
+                Optional reusable profile name. When omitted, the instance type
+                is used as the profile selector.
+              - >-
+                Unknown profile names are valid and simply contribute no profile
+                defaults, preserving support for arbitrary workload types.
 
           enabled:
             type: bool
@@ -271,6 +299,29 @@ argument_specs:
                 default: false
                 description:
                   - Hide managed file content from Ansible task output when sensitive.
+
+              reload:
+                type: str
+                default: restart
+                choices:
+                  - restart
+                  - signal
+                description:
+                  - >-
+                    Lifecycle action when this file changes. restart recreates
+                    the container; signal keeps the running container and sends
+                    reload_signal after service reconciliation.
+                  - >-
+                    For external signal files, the role persists a private
+                    checksum so changes are detected on later Ansible runs.
+
+              reload_signal:
+                type: str
+                default: USR2
+                description:
+                  - >-
+                    Signal sent when reload is signal. USR2 is the ktranslate
+                    SNMP device-file reload signal.
 
           volumes:
             type: list
