@@ -12,8 +12,9 @@
       - anro_ktranslate_raw_instance.type is defined
       - anro_ktranslate_raw_instance.type is string
       - anro_ktranslate_raw_instance.type is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
-      - (anro_ktranslate_raw_instance.profile | default(anro_ktranslate_raw_instance.type)) is string
-      - (anro_ktranslate_raw_instance.profile | default(anro_ktranslate_raw_instance.type)) is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+      - anro_ktranslate_raw_instance.profile is not defined or anro_ktranslate_raw_instance.profile is string
+      - anro_ktranslate_raw_instance.profile is not defined or anro_ktranslate_raw_instance.profile is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+      - (anro_ktranslate_raw_instance.ktranslate_args | default({})) is mapping
       - (anro_ktranslate_raw_instance.enabled | default(true)) is boolean
       - (anro_ktranslate_raw_instance.image | default(anro_ktranslate_image)) is string
       - (anro_ktranslate_raw_instance.image | default(anro_ktranslate_image)) | length > 0
@@ -182,6 +183,23 @@
 
 # Command is authoritative for ktranslate behavior. It can completely replace
 # the Prometheus default without the role understanding upstream sink semantics.
+# Keyed arguments are the normal override surface for profiled instances. null is
+# allowed because it explicitly removes an inherited profile argument.
+- name: VALIDATE INSTANCE | Validate ktranslate arguments for {{ anro_ktranslate_raw_instance.name }}
+  ansible.builtin.assert:
+    that:
+      - item.key is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+      - item.value is none or item.value is string or item.value is number or item.value is boolean
+      - item.value is none or '\n' not in (item.value | string)
+      - item.value is none or '\r' not in (item.value | string)
+    fail_msg: >-
+      Invalid ktranslate argument '{{ item.key }}' for
+      {{ anro_ktranslate_raw_instance.name }}. Values must be a string, number,
+      boolean, or null.
+  loop: "{{ anro_ktranslate_raw_instance.ktranslate_args | default({}) | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
 - name: VALIDATE INSTANCE | Validate command arguments for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
     that:

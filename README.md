@@ -19,70 +19,151 @@ The role has one desired-state interface:
 anro_ktranslate_instances: []
 ```
 
-There are no separate polling, discovery, or trap arrays. Every container uses
-the same lifecycle code. `type` remains descriptive workload metadata and, by
-default, also selects a same-named reusable profile. An explicit `profile` can
-select a different profile without changing the workload classification.
+Every container follows the same lifecycle. `type` is descriptive metadata only.
+Profiles are **explicit and independent**: an instance uses a profile only when it
+sets `profile`, and profiles never inherit from one another. This keeps effective
+configuration easy to trace during incidents.
 
-Effective instance configuration uses deterministic shallow merge precedence:
+Normalization precedence is:
 
 ```text
+internal runtime defaults
+        <
 anro_ktranslate_instance_defaults
-              <
-anro_ktranslate_profiles[profile or type]
-              <
-explicit anro_ktranslate_instances entry
+        <
+explicitly selected profile
+        <
+instance configuration
 ```
 
-Lists such as `command`, `files`, `ports`, and `volumes` are **replaced**, not
-appended. This makes an instance override authoritative and avoids hidden list
-ordering behavior.
+Mappings recursively merge. Scalars and lists supplied at a later layer replace
+the inherited value. `ktranslate_args` is a mapping and therefore merges by CLI
+argument name; this avoids copying a complete command list just to change one
+option. A `null` argument removes the inherited option.
 
-For every instance, `name` is the single canonical runtime name:
+`command` remains a raw escape hatch and is mutually exclusive with
+`ktranslate_args`. There is deliberately no profile inheritance, command-list
+position merging, or implicit profile selection.
 
-```text
-systemd unit:     <name>.service
-Docker container: <name>
-config directory: /etc/ktranslate/<name>/
-environment file: /etc/ktranslate/environment/<name>.env
-```
-
-The role requires names to begin with `anro_ktranslate_service_prefix` (default
-`ktranslate-`). This safely scopes reconciliation to units owned by this role.
+For every instance, `name` is the canonical systemd unit, Docker container, and
+configuration basename. Names must begin with `anro_ktranslate_service_prefix`
+(default `ktranslate-`) so reconciliation remains safely scoped.
 
 ## What the role owns
 
-The role owns:
+The role owns systemd/Docker lifecycle, container runtime options, static managed
+files, external file mounts, dynamic file reload signaling, and reconciliation of
+removed role-managed instances. Docker installation and Grafana Alloy remain out
+of scope.
 
-- systemd unit lifecycle;
-- Docker container lifecycle;
-- image, network, port, capability, bind-mount, and environment configuration;
-- static managed files rendered from inventory;
-- mounting externally owned files;
-- reconciliation of removed role-managed instances.
+The role intentionally does not reproduce ktranslate's full application schema.
+Complex application data belongs in mounted files; the small `ktranslate_args`
+mapping exists only to make common CLI overrides composable.
 
-The role does **not** translate a custom Ansible schema into ktranslate's input,
-format, or sink configuration. `command` and `files` are the application-facing
-interfaces. This prevents the Ansible role from becoming a second copy of
-ktranslate's configuration schema.
+## Built-in profiles
 
-## Prometheus default
-
-The deployment default is a Prometheus format and sink listening on port 8082:
+Three independent profiles cover the common deployment roles:
 
 ```yaml
-anro_ktranslate_default_command:
-  - "-format=prometheus"
-  - "-sinks=prometheus"
-  - "-prom_listen=:8082"
+anro_ktranslate_profiles:
+  polling:
+    ktranslate_args:
+      snmp: /etc/ktranslate/snmp.yaml
+      format: prometheus
+      sinks: prometheus
+      prom_listen: ":8082"
+
+  discovery:
+    ktranslate_args:
+      snmp: /etc/ktranslate/snmp.yaml
+      snmp_discovery_on_start: true
+      format: prometheus
+      sinks: prometheus
+      prom_listen: ":8082"
+
+  traps:
+    ktranslate_args:
+      snmp: /etc/ktranslate/snmp.yaml
+      snmp_trap: ":1620"
+      format: prometheus
+      sinks: prometheus
+      prom_listen: ":8082"
 ```
 
-This is only a default. It is not hard-coded into the systemd template. Any
-instance can replace `command` completely to use another ktranslate-supported
-format, sink, input mode, or combination.
+The role standardizes on `traps` for the workload/profile name. The listener port
+is not published automatically; host exposure is deployment-specific and belongs
+in the instance `ports` list.
 
-Publishing or scraping the endpoint remains an instance/deployment decision.
-Grafana Alloy configuration is intentionally outside this role.
+### Polling instance
+
+A normal poller needs only to select the profile and provide its device/config
+file and any deployment-specific port mapping:
+
+```yaml
+anro_ktranslate_instances:
+  - name: ktranslate-poll-router-001
+    type: polling
+    profile: polling
+    ports:
+      - "127.0.0.1:18082:8082/tcp"
+    files:
+      - name: snmp.yaml
+        source: managed
+        destination: /etc/ktranslate/snmp.yaml
+        format: yaml
+        content: "{{ router_001_snmp_config }}"
+        reload: signal
+        reload_signal: USR2
+```
+
+### Discovery override without command duplication
+
+Only the changed CLI argument is declared on the instance:
+
+```yaml
+anro_ktranslate_instances:
+  - name: ktranslate-discovery-mn-001
+    type: discovery
+    profile: discovery
+    ktranslate_args:
+      snmp_discovery_min: 30
+```
+
+The effective command includes all discovery profile arguments plus
+`-snmp_discovery_min=30`.
+
+### Override or remove inherited arguments
+
+```yaml
+anro_ktranslate_instances:
+  - name: ktranslate-poll-special-001
+    type: polling
+    profile: polling
+    ktranslate_args:
+      prom_listen: ":9090"  # Overrides the profile value.
+      sinks: null            # Removes -sinks entirely.
+```
+
+Boolean values render as lowercase `true`/`false`, matching normal CLI syntax.
+CLI values are limited to strings, numbers, booleans, and null; structured data
+should be placed in a managed/external file instead.
+
+### Instance without a profile
+
+Profiles are optional and never selected from `type` automatically:
+
+```yaml
+anro_ktranslate_instances:
+  - name: ktranslate-custom-001
+    type: custom
+    command:
+      - "-format=prometheus"
+      - "-sinks=prometheus"
+      - "-prom_listen=:8082"
+```
+
+This explicit behavior makes it immediately visible whether a container is using
+a reusable profile or a raw command.
 
 ## Main variables
 
@@ -94,35 +175,20 @@ anro_ktranslate_config_dir: "/etc/ktranslate"
 anro_ktranslate_environment_dir: "/etc/ktranslate/environment"
 anro_ktranslate_service_prefix: "ktranslate"
 
-anro_ktranslate_default_network: "bridge"
-anro_ktranslate_default_pull_policy: "missing"
+anro_ktranslate_default_network: bridge
+anro_ktranslate_default_pull_policy: missing
 anro_ktranslate_default_restart_sec: 5
 anro_ktranslate_default_stop_timeout: 30
 anro_ktranslate_default_start_limit_interval_sec: 60
 anro_ktranslate_default_start_limit_burst: 5
 
-anro_ktranslate_default_command:
-  - "-format=prometheus"
-  - "-sinks=prometheus"
-  - "-prom_listen=:8082"
-
-# Optional stack-wide overrides; empty by default.
 anro_ktranslate_instance_defaults: {}
-
-anro_ktranslate_profiles:
-  polling:
-    command:
-      - "-snmp=/etc/ktranslate/snmp.yaml"
-      - "-format=prometheus"
-      - "-sinks=prometheus"
-      - "-prom_listen=:8082"
-
 anro_ktranslate_reconcile: true
 anro_ktranslate_instances: []
 ```
 
-Production deployments should pin `anro_ktranslate_image` to an explicit
-version or digest rather than `latest`.
+Production deployments should pin `anro_ktranslate_image` to an explicit version
+or digest rather than `latest`.
 
 ## Instance schema
 
@@ -130,6 +196,7 @@ version or digest rather than `latest`.
 anro_ktranslate_instances:
   - name: ktranslate-polling-site-a
     type: polling
+    profile: polling
     enabled: true
 
     image: "kentik/ktranslate:<pinned-version>"
@@ -141,84 +208,19 @@ anro_ktranslate_instances:
     start_limit_burst: 5
 
     environment: {}
-
-    ports:
-      - "127.0.0.1:18082:8082/tcp"
-
+    ports: []
     files: []
     volumes: []
     cap_add: []
 
-    # Omit command to inherit the Prometheus default. Supplying command replaces
-    # the default completely.
-    command: []
+    # Mergeable normal CLI override surface.
+    ktranslate_args: {}
 
-    # Escape hatch for uncommon Docker run options. Do not put secrets here.
+    # Raw escape hatch; do not use together with ktranslate_args.
+    # command: []
+
     extra_docker_args: []
 ```
-
-`command: []` is an explicit empty command. To inherit the Prometheus default,
-omit the `command` key entirely.
-
-## Profiles and normalized defaults
-
-Profiles are convenience defaults, not separate lifecycle implementations. The
-built-in `polling` profile removes the repeated SNMP/Prometheus CLI boilerplate
-from normal polling instances:
-
-```yaml
-anro_ktranslate_instances:
-  - name: ktranslate-poll-router-001
-    type: polling
-    ports:
-      - "127.0.0.1:18082:8082/tcp"
-    files:
-      - name: snmp.yaml
-        source: managed
-        destination: /etc/ktranslate/snmp.yaml
-        format: yaml
-        content: "{{ router_001_snmp_config }}"
-```
-
-Because `type: polling` selects the built-in `polling` profile, the instance
-inherits:
-
-```yaml
-command:
-  - "-snmp=/etc/ktranslate/snmp.yaml"
-  - "-format=prometheus"
-  - "-sinks=prometheus"
-  - "-prom_listen=:8082"
-```
-
-Define deployment-specific profiles to standardize vendor, credential boundary,
-listener, or shard behavior without changing role code:
-
-```yaml
-anro_ktranslate_profiles:
-  polling:
-    command:
-      - "-snmp=/etc/ktranslate/snmp.yaml"
-      - "-format=prometheus"
-      - "-sinks=prometheus"
-      - "-prom_listen=:8082"
-
-  polling_slow:
-    command:
-      - "-snmp=/etc/ktranslate/snmp.yaml"
-      - "-format=prometheus"
-      - "-sinks=prometheus"
-      - "-prom_listen=:8082"
-      # Add only flags supported by the pinned ktranslate version.
-
-anro_ktranslate_instances:
-  - name: ktranslate-poll-special-001
-    type: polling
-    profile: polling_slow
-```
-
-An instance may override any profile key. Because normalization is shallow, an
-explicit `command` or `files` list replaces the profile list completely.
 
 ## Managed files
 

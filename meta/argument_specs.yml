@@ -119,9 +119,12 @@ argument_specs:
       anro_ktranslate_profiles:
         type: dict
         description:
-          - Defines reusable instance defaults keyed by profile name.
-          - Role defaults provide the standard polling profile.
-          - Explicit instance configuration overrides values inherited from a profile.
+          - Defines independent reusable instance defaults keyed by profile name.
+          - Built-in profiles are polling, discovery, and traps.
+          - Profiles do not inherit from other profiles.
+          - An instance uses a profile only when its profile key is explicitly set.
+          - Mappings recursively merge; explicit scalar and list values replace inherited values.
+          - ktranslate_args is merged by argument name so instances override only the CLI options they need.
 
       anro_ktranslate_reconcile:
         type: bool
@@ -154,18 +157,26 @@ argument_specs:
             description:
               - >-
                 Descriptive workload classification such as polling, discovery,
-                traps, flow, or syslog. When profile is omitted, type also selects
-                a same-named profile if one exists.
+                traps, flow, or syslog. Type never selects configuration implicitly.
 
           profile:
             type: str
             description:
+              - Optional reusable profile name from anro_ktranslate_profiles.
+              - When omitted, no profile defaults are applied.
+              - Unknown profile names fail validation.
+
+          ktranslate_args:
+            type: dict
+            description:
               - >-
-                Optional reusable profile name. When omitted, the instance type
-                is used as the profile selector.
+                Keyed ktranslate CLI arguments. Profile and instance mappings are
+                recursively merged and rendered as -key=value arguments.
               - >-
-                Unknown profile names are valid and simply contribute no profile
-                defaults, preserving support for arbitrary workload types.
+                Instance values override same-named profile values. Set a value
+                to null to remove an argument inherited from the selected profile.
+              - Values must be strings, numbers, booleans, or null.
+              - Mutually exclusive with command.
 
           enabled:
             type: bool
@@ -358,8 +369,12 @@ argument_specs:
             elements: str
             description:
               - >-
-                Arguments appended after the image. When omitted, inherits
-                anro_ktranslate_default_command; when provided, replaces it.
+                Raw arguments appended after the image. This is the escape hatch
+                for configurations that should bypass keyed ktranslate_args rendering.
+              - >-
+                Mutually exclusive with ktranslate_args. When neither command nor
+                ktranslate_args is present after normalization, the role uses
+                anro_ktranslate_default_command.
 
           extra_docker_args:
             type: list

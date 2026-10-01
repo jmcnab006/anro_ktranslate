@@ -72,6 +72,15 @@
   loop_control:
     label: "{{ item.key }}"
 
+# Validate each profile's keyed CLI arguments independently. Keeping this in a
+# separate include avoids flattening mappings into opaque list expressions.
+- name: VALIDATE | Validate profile ktranslate arguments
+  ansible.builtin.include_tasks: validate_profile.yml
+  loop: "{{ anro_ktranslate_profiles | dict2items }}"
+  loop_control:
+    loop_var: anro_ktranslate_profile_entry
+    label: "{{ anro_ktranslate_profile_entry.key }}"
+
 # Raw instances are normalized before detailed validation so values inherited
 # from profiles receive the same validation as values written on the instance.
 - name: VALIDATE | Validate ktranslate instance definitions

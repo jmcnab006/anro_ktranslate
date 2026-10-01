@@ -61,15 +61,16 @@
         }
       }
 
-    # Override the built-in polling profile only to enable discovery behavior
-    # required by this integration scenario. The instance intentionally omits
-    # command so Molecule proves profile inheritance works end to end.
-    anro_ktranslate_profiles:
-      polling:
     anro_ktranslate_instances:
       - name: ktranslate-polling-molecule
         type: polling
+        profile: polling
         enabled: true
+        # Override only the arguments required by this integration scenario.
+        # The remaining SNMP/Prometheus arguments are inherited from polling.
+        ktranslate_args:
+          snmp_discovery_on_start: true
+          snmp_discovery_min: 5
         image: "kentik/ktranslate:latest"
         network: ktranslate-molecule
         # Expose ktranslate from the nested Docker daemon to the Molecule
