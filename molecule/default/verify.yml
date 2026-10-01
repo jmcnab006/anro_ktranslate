@@ -2,7 +2,8 @@
 - name: Verify
   hosts: all
   become: true
-
+  vars_files:
+    - vars/main.yaml
   tasks:
     - name: VERIFY | Confirm ktranslate service is active
       ansible.builtin.command:
@@ -48,3 +49,72 @@
         fail_msg: >-
           ktranslate did not expose the expected sysUpTime SNMP metric on its
           Prometheus endpoint.
+
+    # Verify the steady-state container exists before exercising the reload
+    # behavior. Retry because systemd and Docker lifecycle operations are not
+    # guaranteed to become observable at exactly the same instant.
+    - name: VERIFY | Wait for polling container before live reload
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/docker
+          - inspect
+          - "--format={{ '{{.Id}}' }}"
+          - ktranslate-polling-molecule
+      register: _anro_ktranslate_polling_container_before_reload
+      changed_when: false
+      retries: 10
+      delay: 2
+      until: _anro_ktranslate_polling_container_before_reload.rc == 0
+
+    # Deliberately mutate only managed SNMP content. This happens during
+    # verification so Molecule's idempotence phase always sees the original
+    # steady-state configuration from converge.yml.
+    - name: VERIFY | Change signal-bound SNMP configuration
+      ansible.builtin.set_fact:
+        anro_ktranslate_snmp_config: >-
+          {{
+            anro_ktranslate_snmp_config
+            | combine(
+                {
+                  'devices': {
+                    'router02': {
+                      'poll_time_sec': 61
+                    }
+                  }
+                },
+                recursive=true
+              )
+          }}
+
+    # Reapplying the role should update snmp.yaml and send USR2 to the existing
+    # container without changing restart-bound systemd configuration.
+    - name: VERIFY | Reapply role to exercise live reload
+      ansible.builtin.include_role:
+        name: anro_ktranslate
+
+    - name: VERIFY | Inspect polling container after live reload
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/docker
+          - inspect
+          - "--format={{ '{{.Id}}' }}"
+          - ktranslate-polling-molecule
+      register: _anro_ktranslate_polling_container_after_reload
+      changed_when: false
+      retries: 10
+      delay: 2
+      until: _anro_ktranslate_polling_container_after_reload.rc == 0
+
+    # A changed Docker ID means the role restarted/recreated the container
+    # instead of using the configured SIGUSR2 live-reload path.
+    - name: VERIFY | Verify live reload preserved polling container
+      ansible.builtin.assert:
+        that:
+          - >-
+            _anro_ktranslate_polling_container_before_reload.stdout ==
+            _anro_ktranslate_polling_container_after_reload.stdout
+        fail_msg: >-
+          The polling container was recreated while applying a signal-reloadable
+          configuration change. Expected SIGUSR2 reload without container restart.
+        success_msg: >-
+          The polling container retained its Docker ID across the live reload.

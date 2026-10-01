@@ -1,0 +1,60 @@
+# full anro_ktranslate_snmp_config with no combining so that the verify validates properly and can load the configs.
+anro_ktranslate_snmp_config:
+  devices:
+    router01:
+      device_name: router01
+      device_ip: router01
+      snmp_comm: public
+      snmp_ver: "2c"
+      poll_time_sec: 60
+      timeout_ms: 3000
+      retries: 1
+    router02:
+      device_name: router02
+      device_ip: router02
+      snmp_comm: public
+      snmp_ver: "2c"
+      poll_time_sec: 60
+      timeout_ms: 3000
+      retries: 1
+  global:
+    poll_time_sec: 60
+    timeout_ms: 3000
+    retries: 1
+    drop_if_outside_poll: false
+    mib_profile_dir: /etc/ktranslate/profiles
+    mibs_db: /etc/ktranslate/mibs.db
+    mibs_enabled:
+      - HOST-RESOURCES-MIB
+  trap:
+    listen: "0.0.0.0:1620"
+  discovery:
+    cidrs: []
+    ports:
+      - 161
+    default_communities:
+      - public
+    add_devices: false
+    add_mibs: true
+    threads: 4
+
+anro_ktranslate_instances:
+  - name: ktranslate-polling-molecule
+    type: polling
+    profile: polling
+    enabled: true
+    image: "kentik/ktranslate:latest"
+    network: ktranslate-molecule
+
+    ports:
+      - "0.0.0.0:18082:8082/tcp"
+    files:
+      - name: snmp.yaml
+        source: managed
+        destination: /etc/ktranslate/snmp.yaml
+        mode: "0644"
+        format: yaml
+        read_only: true
+        content: "{{ anro_ktranslate_snmp_config }}"
+        reload: signal
+        reload_signal: USR2

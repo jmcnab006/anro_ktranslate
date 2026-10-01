@@ -37,26 +37,10 @@ platforms:
       - name: ktranslate-molecule
         ipv4_address: 172.29.0.10
 
-  - name: netbox-mock
-    image: "python:3.13-alpine"
-    pre_build_image: true
-    command: "python3 /mock/server.py"
-    volumes:
-      - "${MOLECULE_SCENARIO_DIRECTORY}/files/netbox-mock:/mock:ro"
-    networks:
-      - name: ktranslate-molecule
-        ipv4_address: "172.29.0.20"
-
   - name: snmp-router01
     image: "tandrup/snmpsim:latest"
     pre_build_image: true
     override_command: false
-    command: >-
-      /usr/local/bin/snmpsimd.py
-      --process-user=snmpsim
-      --process-group=snmpsim
-      --data-dir=/snmprec
-      --agent-udpv4-endpoint=0.0.0.0:161
     volumes:
       - "${MOLECULE_SCENARIO_DIRECTORY}/files/snmpsim/router01/public.snmprec:/usr/local/snmpsim/data/public.snmprec:ro"
     networks:
