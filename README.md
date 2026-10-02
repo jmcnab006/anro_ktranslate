@@ -435,9 +435,10 @@ anro_ktranslate_instances:
   - name: ktranslate-flow-site-a
     type: flow
     network: host
-    command:
-      - "-format=flat_json"
-      - "-sinks=kafka"
+    ktranslate_args:
+      prom_listen: null  # nulls out the prom_listen
+      sinks: "kafka"     # sets the sink to kafka
+      format: "flat_json"  # sets our output format to flat_json
       # Add the remaining flags/environment required by the pinned ktranslate
       # version and your Kafka deployment.
     environment: {}
@@ -510,32 +511,6 @@ to deploy declared desired state rather than making autonomous scaling decisions
 - Bind-mount paths and instance names are validated before service changes.
 - Docker installation and daemon security policy are intentionally separate from
   this role.
-
-## Migration from the proof-of-concept interface
-
-Replace the three v1 arrays:
-
-```yaml
-anro_ktranslate_polling_instances: []
-anro_ktranslate_discovery_instances: []
-anro_ktranslate_trap_instances: []
-```
-
-with one list:
-
-```yaml
-anro_ktranslate_instances:
-  - name: ktranslate-polling-site-a
-    type: polling
-  - name: ktranslate-discovery-site-a
-    type: discovery
-  - name: ktranslate-traps-site-a
-    type: traps
-```
-
-The old generic `config:` mapping is replaced by `files:`. This removes the
-assumption that ktranslate has exactly one configuration file and creates the
-future ownership boundary needed for externally rendered configuration.
 
 ## Molecule
 

@@ -3,7 +3,7 @@ anro_ktranslate_snmp_config:
   devices:
     router01:
       device_name: router01
-      device_ip: router01
+      device_ip: 172.29.0.21
       snmp_comm: public
       snmp_ver: "2c"
       poll_time_sec: 60
@@ -11,7 +11,7 @@ anro_ktranslate_snmp_config:
       retries: 1
     router02:
       device_name: router02
-      device_ip: router02
+      device_ip: 172.29.0.22
       snmp_comm: public
       snmp_ver: "2c"
       poll_time_sec: 60
