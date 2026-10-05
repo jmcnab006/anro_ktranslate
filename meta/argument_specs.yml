@@ -248,7 +248,8 @@ argument_specs:
               - Files mounted individually into the container.
               - >-
                 Managed files are rendered by this role from static inventory
-                content; external files are owned by another process or role.
+                content; URL files are downloaded by the managed host; external
+                files are owned by another process or role.
             options:
               name:
                 type: str
@@ -262,14 +263,28 @@ argument_specs:
                 choices:
                   - managed
                   - external
+                  - url
                 description:
-                  - Whether this role renders content or mounts an existing host file.
+                  - Select managed content, an existing external host file, or an HTTP/HTTPS download.
 
               host_path:
                 type: path
                 description:
                   - Required absolute host path when source is external.
-                  - Not valid when source is managed.
+                  - Not valid when source is managed or url.
+
+              url:
+                type: str
+                description:
+                  - Required HTTP or HTTPS URL when source is url.
+                  - The managed host stages the file before service reconciliation.
+                  - A failed URL download prevents promotion, restart, and signal reload processing.
+
+              validate_certs:
+                type: bool
+                default: true
+                description:
+                  - Validate TLS certificates for HTTPS URL downloads.
 
               destination:
                 type: path
@@ -292,13 +307,13 @@ argument_specs:
                 type: raw
                 description:
                   - Static content for a managed file.
-                  - Must not be supplied for an external file.
+                  - Must not be supplied for an external or URL file.
 
               mode:
                 type: str
                 default: "0640"
                 description:
-                  - Host mode for a managed file.
+                  - Host mode for a managed or downloaded URL file.
 
               read_only:
                 type: bool

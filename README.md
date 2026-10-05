@@ -52,7 +52,8 @@ configuration basename. Names must begin with `anro_ktranslate_service_prefix`
 ## What the role owns
 
 The role owns systemd/Docker lifecycle, container runtime options, static managed
-files, external file mounts, dynamic file reload signaling, and reconciliation of
+files, HTTP/HTTPS-downloaded files, external file mounts, dynamic file reload
+signaling, and reconciliation of
 removed role-managed instances. Docker installation and Grafana Alloy remain out
 of scope.
 
@@ -272,6 +273,38 @@ files:
 
 For sensitive managed files, set `no_log: true` and use an appropriately
 restrictive mode such as `"0600"`.
+
+## URL device files
+
+Use `source: url` when a device configuration is published as raw ktranslate
+YAML over HTTP or HTTPS. The managed host downloads the file with
+`ansible.builtin.get_url`, stores it in the instance configuration directory,
+and mounts it like a managed file. TLS certificate validation is enabled by
+default.
+
+```yaml
+anro_ktranslate_instances:
+  - name: ktranslate-polling
+    type: polling
+    profile: polling
+    files:
+      - name: snmp.yaml
+        source: url
+        url: https://config.example.com/ktranslate/snmp.yaml
+        destination: /etc/ktranslate/snmp.yaml
+        mode: "0644"
+        read_only: true
+        reload: signal
+        reload_signal: USR2
+```
+
+URL downloads are fail-closed and staged before replacing active configuration.
+If any configured download fails, the role fails before promoting downloaded
+files, service reconciliation, or restart/signal processing. The running
+container therefore keeps its complete last-known-good configuration. An
+unchanged remote file is idempotent; changed content follows the file's `reload`
+policy. Set `validate_certs: false` only for controlled test environments
+where TLS certificate validation is intentionally unavailable.
 
 ## External files and future configuration renderers
 

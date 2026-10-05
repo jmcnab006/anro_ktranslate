@@ -37,6 +37,16 @@ platforms:
       - name: ktranslate-molecule
         ipv4_address: 172.29.0.10
 
+  - name: ktranslate-config-web
+    image: "geerlingguy/docker-ubuntu2404-ansible:latest"
+    pre_build_image: true
+    command: "sleep infinity"
+    networks:
+      - name: ktranslate-molecule
+        ipv4_address: "172.29.0.20"
+    groups:
+      - molecule_support
+
   - name: snmp-router01
     image: "tandrup/snmpsim:latest"
     pre_build_image: true

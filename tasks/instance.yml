@@ -39,6 +39,14 @@
           | map(attribute='name')
           | list
         )
+        +
+        (
+          anro_ktranslate_instance.files
+          | selectattr('source', 'defined')
+          | selectattr('source', 'equalto', 'url')
+          | map(attribute='name')
+          | list
+        )
       }}
 
 # Hidden files are intentionally excluded so .external-signal-checksums.yml is
@@ -87,6 +95,56 @@
     label: "{{ item.name }}"
   when: (item.source | default('managed')) == 'managed'
   register: anro_ktranslate_managed_file_results
+  no_log: "{{ item.no_log | default(false) | bool }}"
+
+# URL files are staged before replacing active configuration. If any download
+# fails, Ansible stops here and no staged file is promoted, so the running
+# container keeps the complete last-known-good device configuration and receives
+# no restart or reload signal.
+- name: INSTANCE | Create URL download staging directory for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.file:
+    path: "{{ anro_ktranslate_current_config_dir }}/.downloads"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: >-
+    anro_ktranslate_instance.files
+    | selectattr('source', 'defined')
+    | selectattr('source', 'equalto', 'url')
+    | list
+    | length > 0
+
+- name: INSTANCE | Stage URL files for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "{{ anro_ktranslate_current_config_dir }}/.downloads/{{ item.name }}"
+    owner: root
+    group: root
+    mode: "0600"
+    validate_certs: "{{ item.validate_certs | default(true) | bool }}"
+  loop: "{{ anro_ktranslate_instance.files }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: (item.source | default('managed')) == 'url'
+  no_log: "{{ item.no_log | default(false) | bool }}"
+
+# Promotion occurs only after every URL download succeeds. copy compares staged
+# and active bytes, providing deterministic changed state for restart/signal
+# classification while preserving the active file on download failure.
+- name: INSTANCE | Promote downloaded URL files for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.copy:
+    src: "{{ anro_ktranslate_current_config_dir }}/.downloads/{{ item.name }}"
+    dest: "{{ anro_ktranslate_current_config_dir }}/{{ item.name }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "{{ item.mode | default('0640') }}"
+  loop: "{{ anro_ktranslate_instance.files }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: (item.source | default('managed')) == 'url'
+  register: anro_ktranslate_url_file_results
   no_log: "{{ item.no_log | default(false) | bool }}"
 
 # External files are never modified by this role. Checksums serve two purposes:
@@ -211,6 +269,28 @@
         | length > 0
       }}
 
+# URL files use the same lifecycle contract as managed files. Download changes
+# can therefore request either a container restart or a post-reconcile signal.
+- name: INSTANCE | Determine restart-bound URL file changes for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_restart_url_files_changed: >-
+      {{
+        anro_ktranslate_url_file_results.results
+        | selectattr('changed', 'defined')
+        | selectattr('changed', 'equalto', true)
+        | selectattr('item.reload', 'undefined')
+        | list
+        | length > 0
+        or
+        anro_ktranslate_url_file_results.results
+        | selectattr('changed', 'defined')
+        | selectattr('changed', 'equalto', true)
+        | selectattr('item.reload', 'defined')
+        | selectattr('item.reload', 'equalto', 'restart')
+        | list
+        | length > 0
+      }}
+
 # Consolidate all conditions that require container replacement. Live reload is
 # suppressed when a restart occurs because the newly started process already
 # reads the latest mounted files.
@@ -219,6 +299,7 @@
     anro_ktranslate_instance_restart_required: >-
       {{
         anro_ktranslate_restart_managed_files_changed
+        or anro_ktranslate_restart_url_files_changed
         or (anro_ktranslate_obsolete_managed_files.changed | default(false))
         or anro_ktranslate_environment_template.changed
         or anro_ktranslate_unit_template.changed
@@ -251,6 +332,17 @@
     anro_ktranslate_live_reload_signals: >-
       {{ anro_ktranslate_live_reload_signals + [item.item.reload_signal | default('USR2')] }}
   loop: "{{ anro_ktranslate_managed_file_results.results }}"
+  loop_control:
+    label: "{{ item.item.name | default('SKIPPED') }}"
+  when:
+    - item.changed | default(false) | bool
+    - (item.item.reload | default('restart')) == 'signal'
+
+- name: INSTANCE | Collect URL file live reload signals for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_live_reload_signals: >-
+      {{ anro_ktranslate_live_reload_signals + [item.item.reload_signal | default('USR2')] }}
+  loop: "{{ anro_ktranslate_url_file_results.results }}"
   loop_control:
     label: "{{ item.item.name | default('SKIPPED') }}"
   when:

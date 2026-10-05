@@ -1,22 +1,40 @@
-# full anro_ktranslate_snmp_config with no combining so that the verify validates properly and can load the configs.
-anro_ktranslate_snmp_config:
+anro_ktranslate_molecule_snmp_url: http://172.29.0.20:8080/snmp.yaml
+anro_ktranslate_molecule_device_url: http://172.29.0.20:8080/devices.json
+
+
+molecule_anro_ktranslate_devices:
   devices:
     router01:
       device_name: router01
       device_ip: 172.29.0.21
-      snmp_comm: public
-      snmp_ver: "2c"
-      poll_time_sec: 60
-      timeout_ms: 3000
-      retries: 1
     router02:
       device_name: router02
       device_ip: 172.29.0.22
-      snmp_comm: public
-      snmp_ver: "2c"
-      poll_time_sec: 60
-      timeout_ms: 3000
-      retries: 1
+
+molecule_anro_devices_snmp_config:
+  100:
+    id: "100"
+    device_name: router01
+    device_type: "snmpsim"
+    ip: 172.29.0.21
+    device_status: "V"
+    device_description: "Molecule snmpsim device"
+    sending_ips:
+      - 172.29.0.21
+    device_snmp_community: public
+  101:
+    id: "101"
+    device_name: router02
+    device_type: "snmpsim"
+    ip: 172.29.0.22
+    device_status: "V"
+    device_description: "Molecule snmpsim device"
+    sending_ips:
+      - 172.29.0.22
+    device_snmp_community: public
+
+# full anro_ktranslate_snmp_config with no combining so that the verify validates properly and can load the configs.
+anro_ktranslate_snmp_config:
   global:
     poll_time_sec: 60
     timeout_ms: 3000
@@ -43,18 +61,26 @@ anro_ktranslate_instances:
     type: polling
     profile: polling
     enabled: true
-    image: "kentik/ktranslate:latest"
     network: ktranslate-molecule
-
+    ktranslate_args:
+      api_device_file: /etc/ktranslate/devices.json
     ports:
       - "0.0.0.0:18082:8082/tcp"
     files:
       - name: snmp.yaml
-        source: managed
+        source: url
+        url: "{{ anro_ktranslate_molecule_snmp_url }}"
         destination: /etc/ktranslate/snmp.yaml
         mode: "0644"
-        format: yaml
         read_only: true
-        content: "{{ anro_ktranslate_snmp_config }}"
+        reload: signal
+        reload_signal: USR2
+
+      - name: devices.json
+        source: url
+        url: "{{ anro_ktranslate_molecule_device_url }}"
+        destination: /etc/ktranslate/devices.json
+        mode: "0644"
+        read_only: true
         reload: signal
         reload_signal: USR2
