@@ -513,6 +513,32 @@ to deploy declared desired state rather than making autonomous scaling decisions
   this role.
 
 ## Molecule
+### Installation
+Set up a Python virtual environment and install Ansible and Molecule by running python3 -m venv molecule-venv followed by source molecule-venv/bin/activate and pip install ansible-core molecule.
+Create and Activate the Virtual Environment
+- Open your terminal and create a dedicated folder for your project or go to your existing Ansible role directory.
+- Create the virtual environment: 
+```bash
+python3 -m venv molecule-venv
+```
+- Activate the environment:
+	- On Linux / macOS: source molecule-venv/bin/activate
+	- On Windows (CMD/PowerShell): molecule-venv\Scripts\activate
+Install Molecule and Dependencies
+- Upgrade pip and setuptools inside the environment to ensure smooth installation:bash
+```bash
+python3 -m pip install --upgrade pip setuptools
+```
+- Install Molecule Documentation along with Ansible and optional linters or drivers (like Docker or Podman):
+```bash
+pip install ansible-core molecule "molecule-plugins[docker]" ansible-lint
+````
+Verify Installation
+- Check that both Ansible and Molecule point to the virtual environment binaries:
+```bash
+molecule --version
+ansible --version
+````
 
 The default Molecule scenario runs Ubuntu 24.04 with a real nested Docker daemon.
 It verifies:
