@@ -18,6 +18,15 @@
     group: root
     mode: "0750"
 
+# device_source is resolved before any active configuration is reconciled. The
+# include downloads and validates the remote inventory, then appends one synthetic
+# managed file containing Ansible-owned policy plus the downloaded devices. A
+# retrieval or validation failure therefore cannot alter the active snmp.yaml or
+# trigger service lifecycle actions.
+- name: INSTANCE | Resolve remote device source for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.include_tasks: device_source.yml
+  when: anro_ktranslate_instance.device_source is defined
+
 # Only declared managed files participate in file reconciliation. External files
 # are owned by another renderer and the hidden checksum state is role metadata,
 # so neither is removed by this managed-file cleanup.

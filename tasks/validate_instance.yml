@@ -30,6 +30,7 @@
       - (anro_ktranslate_raw_instance.ports | default([])) is not string
       - (anro_ktranslate_raw_instance.files | default([])) is sequence
       - (anro_ktranslate_raw_instance.files | default([])) is not string
+      - anro_ktranslate_raw_instance.device_source is not defined or anro_ktranslate_raw_instance.device_source is mapping
       - (anro_ktranslate_raw_instance.volumes | default([])) is sequence
       - (anro_ktranslate_raw_instance.volumes | default([])) is not string
       - (anro_ktranslate_raw_instance.cap_add | default([])) is sequence
@@ -70,6 +71,38 @@
   loop: "{{ (anro_ktranslate_raw_instance.environment | default({})) | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
+
+# device_source owns one generated SNMP file. It accepts only a remote devices
+# mapping plus Ansible-owned base configuration; arbitrary remote global settings
+# are deliberately not merged into collector policy.
+- name: VALIDATE INSTANCE | Validate device source for {{ anro_ktranslate_raw_instance.name }}
+  ansible.builtin.assert:
+    that:
+      - anro_ktranslate_raw_instance.device_source.url is defined
+      - anro_ktranslate_raw_instance.device_source.url is string
+      - anro_ktranslate_raw_instance.device_source.url is match('^https?://')
+      - (anro_ktranslate_raw_instance.device_source.validate_certs | default(true)) is boolean
+      - (anro_ktranslate_raw_instance.device_source.config | default({})) is mapping
+      - (anro_ktranslate_raw_instance.device_source.name | default('snmp.yaml')) is string
+      - (anro_ktranslate_raw_instance.device_source.name | default('snmp.yaml')) is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+      - (anro_ktranslate_raw_instance.device_source.destination | default('/etc/ktranslate/snmp.yaml')) is match('^/')
+      - (anro_ktranslate_raw_instance.device_source.mode | default('0640')) is match('^0[0-7]{3}$')
+      - (anro_ktranslate_raw_instance.device_source.read_only | default(true)) is boolean
+      - (anro_ktranslate_raw_instance.device_source.no_log | default(false)) is boolean
+      - (anro_ktranslate_raw_instance.device_source.reload | default('signal')) in ['restart', 'signal']
+      - (anro_ktranslate_raw_instance.device_source.reload_signal | default('USR2')) is match('^[A-Z0-9]+$')
+      - >-
+        (anro_ktranslate_raw_instance.files | default([])
+        | selectattr('name', 'equalto', anro_ktranslate_raw_instance.device_source.name | default('snmp.yaml'))
+        | list | length) == 0
+      - >-
+        (anro_ktranslate_raw_instance.files | default([])
+        | selectattr('destination', 'equalto', anro_ktranslate_raw_instance.device_source.destination | default('/etc/ktranslate/snmp.yaml'))
+        | list | length) == 0
+    fail_msg: >-
+      Invalid device_source for {{ anro_ktranslate_raw_instance.name }}. It requires
+      an HTTP/HTTPS url and must not conflict with an existing file name or destination.
+  when: anro_ktranslate_raw_instance.device_source is defined
 
 # Managed files are rendered by this role. External files are intentionally an
 # ownership seam for a future API/Git/NetBox renderer and are mounted read-only.

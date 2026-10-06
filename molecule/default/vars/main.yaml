@@ -1,40 +1,9 @@
-anro_ktranslate_molecule_snmp_url: http://172.29.0.20:8080/snmp.yaml
-anro_ktranslate_molecule_device_url: http://172.29.0.20:8080/devices.json
+---
+anro_ktranslate_molecule_device_source_url: http://172.29.0.20:8080/devices.yaml
 
-
-molecule_anro_ktranslate_devices:
-  devices:
-    router01:
-      device_name: router01
-      device_ip: 172.29.0.21
-    router02:
-      device_name: router02
-      device_ip: 172.29.0.22
-
-molecule_anro_devices_snmp_config:
-  100:
-    id: "100"
-    device_name: router01
-    device_type: "snmpsim"
-    ip: 172.29.0.21
-    device_status: "V"
-    device_description: "Molecule snmpsim device"
-    sending_ips:
-      - 172.29.0.21
-    device_snmp_community: public
-  101:
-    id: "101"
-    device_name: router02
-    device_type: "snmpsim"
-    ip: 172.29.0.22
-    device_status: "V"
-    device_description: "Molecule snmpsim device"
-    sending_ips:
-      - 172.29.0.22
-    device_snmp_community: public
-
-# full anro_ktranslate_snmp_config with no combining so that the verify validates properly and can load the configs.
-anro_ktranslate_snmp_config:
+# Collector policy is owned by Ansible for both test instances. The URL-backed
+# instance merges only the remote devices mapping into this structure.
+anro_ktranslate_molecule_snmp_base_config:
   global:
     poll_time_sec: 60
     timeout_ms: 3000
@@ -56,31 +25,70 @@ anro_ktranslate_snmp_config:
     add_mibs: true
     threads: 4
 
+# This inventory is published by the Molecule HTTP peer for device_source.
+# Per-device polling fields are included to keep the fixture directly usable by
+# ktranslate without allowing the remote source to control global policy.
+anro_ktranslate_molecule_devices:
+  devices:
+    router01:
+      device_name: router01
+      device_ip: 172.29.0.21
+      snmp_comm: public
+      snmp_ver: "2c"
+      poll_time_sec: 60
+      timeout_ms: 3000
+      retries: 1
+    router02:
+      device_name: router02
+      device_ip: 172.29.0.22
+      snmp_comm: public
+      snmp_ver: "2c"
+      poll_time_sec: 60
+      timeout_ms: 3000
+      retries: 1
+
+# The first service exercises a configuration supplied entirely by Ansible.
+anro_ktranslate_molecule_ansible_snmp_config: >-
+  {{
+    anro_ktranslate_molecule_snmp_base_config
+    | combine({'devices': anro_ktranslate_molecule_devices.devices}, recursive=false)
+  }}
+
 anro_ktranslate_instances:
-  - name: ktranslate-polling-molecule
+  - name: ktranslate-polling-ansible
     type: polling
     profile: polling
     enabled: true
     network: ktranslate-molecule
-    ktranslate_args:
-      api_device_file: /etc/ktranslate/devices.json
     ports:
       - "0.0.0.0:18082:8082/tcp"
     files:
       - name: snmp.yaml
-        source: url
-        url: "{{ anro_ktranslate_molecule_snmp_url }}"
+        source: managed
         destination: /etc/ktranslate/snmp.yaml
+        format: yaml
         mode: "0644"
         read_only: true
+        content: "{{ anro_ktranslate_molecule_ansible_snmp_config }}"
         reload: signal
         reload_signal: USR2
 
-      - name: devices.json
-        source: url
-        url: "{{ anro_ktranslate_molecule_device_url }}"
-        destination: /etc/ktranslate/devices.json
-        mode: "0644"
-        read_only: true
-        reload: signal
-        reload_signal: USR2
+  # The second service owns the same global policy in Ansible but obtains only
+  # device membership from the external HTTP fixture.
+  - name: ktranslate-polling-url
+    type: polling
+    profile: polling
+    enabled: true
+    network: ktranslate-molecule
+    ports:
+      - "0.0.0.0:18083:8082/tcp"
+    device_source:
+      url: "{{ anro_ktranslate_molecule_device_source_url }}"
+      validate_certs: true
+      config: "{{ anro_ktranslate_molecule_snmp_base_config }}"
+      name: snmp.yaml
+      destination: /etc/ktranslate/snmp.yaml
+      mode: "0644"
+      read_only: true
+      reload: signal
+      reload_signal: USR2

@@ -153,25 +153,15 @@
         group: root
         mode: "0755"
 
-    # Render the shared Molecule device data on the external web peer so the
-    # HTTP fixture and role tests use one source of truth.
-    - name: PREPARE | Render HTTP device configuration fixture
+    # Publish only device membership. The role under test owns global SNMP
+    # policy and must merge this document into its effective snmp.yaml.
+    - name: PREPARE | Render HTTP device inventory fixture
       ansible.builtin.copy:
-        dest: /srv/ktranslate-config/snmp.yaml
+        dest: /srv/ktranslate-config/devices.yaml
         owner: root
         group: root
         mode: "0644"
-        content: "{{ anro_ktranslate_snmp_config | to_nice_yaml(indent=2, sort_keys=false) }}"
-
-    # Render the shared Molecule device data on the external web peer so the
-    # HTTP fixture and role tests use one source of truth.
-    - name: PREPARE | Render HTTP device configuration fixture
-      ansible.builtin.copy:
-        dest: /srv/ktranslate-config/devices.json
-        owner: root
-        group: root
-        mode: "0644"
-        content: "{{ molecule_anro_ktranslate_devices | to_nice_json(indent=2) }}"
+        content: "{{ anro_ktranslate_molecule_devices | to_nice_yaml(indent=2, sort_keys=false) }}"
 
     - name: PREPARE | Check HTTP fixture server
       ansible.builtin.command:
@@ -179,13 +169,12 @@
           - /usr/bin/pgrep
           - -f
           - "python3 -m http.server 8080 --bind 0.0.0.0 --directory /srv/ktranslate-config"
-      register: anro_ktranslate_molecule_web_process
+      register: anro_ktranslate_molecule_http_server
       changed_when: false
-      failed_when: anro_ktranslate_molecule_web_process.rc not in [0, 1]
+      failed_when: anro_ktranslate_molecule_http_server.rc not in [0, 1]
 
-    # Python is already present in the Ansible-capable Molecule image. Running
-    # its static HTTP server keeps the fixture peer minimal and directly visible
-    # as a top-level Molecule container.
+    # The web peer exists only for the Molecule scenario, so a detached Python
+    # static server is sufficient and keeps the fixture directly inspectable.
     - name: PREPARE | Start HTTP fixture server
       ansible.builtin.command:
         argv:
@@ -197,17 +186,16 @@
           - 0.0.0.0
           - --directory
           - /srv/ktranslate-config
-      async: 31536000
+      async: 86400
       poll: 0
       changed_when: true
-      when: anro_ktranslate_molecule_web_process.rc == 1
+      when: anro_ktranslate_molecule_http_server.rc == 1
 
-    - name: PREPARE | Wait for HTTP device configuration fixture
+    - name: PREPARE | Wait for HTTP device inventory fixture
       ansible.builtin.uri:
-        url: http://127.0.0.1:8080/snmp.yaml
-        return_content: true
+        url: http://127.0.0.1:8080/devices.yaml
         status_code: 200
-      register: anro_ktranslate_molecule_web_ready
-      retries: 15
-      delay: 2
-      until: anro_ktranslate_molecule_web_ready.status == 200
+      register: anro_ktranslate_molecule_http_ready
+      retries: 10
+      delay: 1
+      until: anro_ktranslate_molecule_http_ready.status == 200

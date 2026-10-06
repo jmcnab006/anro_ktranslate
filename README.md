@@ -306,6 +306,53 @@ unchanged remote file is idempotent; changed content follows the file's `reload`
 policy. Set `validate_certs: false` only for controlled test environments
 where TLS certificate validation is intentionally unavailable.
 
+## Remote device source merged with Ansible policy
+
+Use `device_source` when Ansible should own global ktranslate SNMP policy while
+device membership is published independently as YAML. The remote document must
+contain a top-level `devices` mapping. The role downloads and validates it, then
+renders one effective `snmp.yaml` containing `device_source.config` plus the
+remote devices. Remote data cannot replace global collector policy.
+
+```yaml
+anro_ktranslate_instances:
+  - name: ktranslate-polling-site-a
+    type: polling
+    profile: polling
+    device_source:
+      url: https://config.example.com/site-a/devices.yaml
+      validate_certs: true
+      config:
+        global:
+          poll_time_sec: 60
+          timeout_ms: 3000
+          retries: 1
+      destination: /etc/ktranslate/snmp.yaml
+      reload: signal
+      reload_signal: USR2
+```
+
+The remote document is intentionally limited to device inventory:
+
+```yaml
+devices:
+  router01:
+    device_name: router01
+    device_ip: 192.0.2.10
+    snmp_comm: public
+    snmp_ver: "2c"
+```
+
+`device_source` is fail-closed. Download and YAML validation happen before the
+assembled active file is rendered. A failed HTTP request, invalid YAML document,
+or missing `devices` mapping fails the role without changing the active
+configuration and without requesting a restart or reload signal. When the
+assembled file changes successfully, it uses the same restart/signal lifecycle
+semantics as a normal managed file.
+
+Do not also define a `files` entry with the same `name` or `destination`; one
+configuration path must own each mounted file.
+
 ## External files and future configuration renderers
 
 An external file is **not created or modified by this role**. It is an explicit
@@ -579,11 +626,14 @@ It verifies:
 - systemd -> Docker lifecycle;
 - bridge networking and port publishing;
 - host networking without `--publish`;
+- two independent polling services: one fully Ansible-managed and one URL-merged;
 - managed raw/YAML files;
+- remote `device_source` inventory merged with Ansible-owned global SNMP policy;
+- fail-closed URL retrieval that preserves active configuration and container identity;
 - externally owned file mounts;
 - disabled instances;
 - explicit polling-profile selection and keyed CLI argument merging;
-- SIGUSR2 reload of a changed managed SNMP file without replacing the container.
+- SIGUSR2 reload of changed device inventory without replacing either polling container.
 
 The nested workload image is also Ubuntu 24.04 so the lifecycle test does not
 hide behavior behind a mock Docker CLI.

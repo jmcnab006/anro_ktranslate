@@ -1,0 +1,69 @@
+---
+# The remote document is intentionally limited to a devices mapping. Collector
+# policy remains Ansible-owned in device_source.config, preventing an inventory
+# publisher from changing global polling, discovery, trap, or MIB behavior.
+- name: DEVICE SOURCE | Download device inventory for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.get_url:
+    url: "{{ anro_ktranslate_instance.device_source.url }}"
+    dest: "{{ anro_ktranslate_current_config_dir }}/.device-source.yaml"
+    owner: root
+    group: root
+    mode: "0600"
+    validate_certs: "{{ anro_ktranslate_instance.device_source.validate_certs | default(true) | bool }}"
+  no_log: "{{ anro_ktranslate_instance.device_source.no_log | default(false) | bool }}"
+
+# Read only the successfully downloaded staging file. No active configuration
+# has been changed at this point, so parse/validation failures are fail-closed.
+- name: DEVICE SOURCE | Read downloaded device inventory for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.slurp:
+    src: "{{ anro_ktranslate_current_config_dir }}/.device-source.yaml"
+  register: anro_ktranslate_device_source_slurp
+  no_log: "{{ anro_ktranslate_instance.device_source.no_log | default(false) | bool }}"
+
+- name: DEVICE SOURCE | Parse downloaded device inventory for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_device_source_data: >-
+      {{ anro_ktranslate_device_source_slurp.content | b64decode | from_yaml }}
+  no_log: "{{ anro_ktranslate_instance.device_source.no_log | default(false) | bool }}"
+
+- name: DEVICE SOURCE | Validate downloaded device inventory for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.assert:
+    that:
+      - anro_ktranslate_device_source_data is mapping
+      - anro_ktranslate_device_source_data.devices is defined
+      - anro_ktranslate_device_source_data.devices is mapping
+    fail_msg: >-
+      device_source for {{ anro_ktranslate_instance.name }} must return a YAML
+      mapping containing a devices mapping. The active configuration was not changed.
+  no_log: "{{ anro_ktranslate_instance.device_source.no_log | default(false) | bool }}"
+
+# Append the assembled SNMP document as an ordinary managed file. Reusing the
+# existing managed-file path gives device_source identical mount, idempotency,
+# restart, and signal semantics without a second service-management code path.
+- name: DEVICE SOURCE | Assemble effective SNMP configuration for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_instance: >-
+      {{
+        anro_ktranslate_instance
+        | combine(
+            {
+              'files': (anro_ktranslate_instance.files | default([])) + [
+                {
+                  'name': anro_ktranslate_instance.device_source.name | default('snmp.yaml'),
+                  'source': 'managed',
+                  'destination': anro_ktranslate_instance.device_source.destination | default('/etc/ktranslate/snmp.yaml'),
+                  'format': 'yaml',
+                  'mode': anro_ktranslate_instance.device_source.mode | default('0640'),
+                  'read_only': anro_ktranslate_instance.device_source.read_only | default(true),
+                  'reload': anro_ktranslate_instance.device_source.reload | default('signal'),
+                  'reload_signal': anro_ktranslate_instance.device_source.reload_signal | default('USR2'),
+                  'no_log': anro_ktranslate_instance.device_source.no_log | default(false),
+                  'content': (anro_ktranslate_instance.device_source.config | default({}))
+                    | combine({'devices': anro_ktranslate_device_source_data.devices}, recursive=false)
+                }
+              ]
+            },
+            recursive=false
+          )
+      }}
+  no_log: "{{ anro_ktranslate_instance.device_source.no_log | default(false) | bool }}"

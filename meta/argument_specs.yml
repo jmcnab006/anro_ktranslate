@@ -240,6 +240,73 @@ argument_specs:
               - Docker publish specifications such as 127.0.0.1:18082:8082/tcp.
               - Must be empty when network is host.
 
+          device_source:
+            type: dict
+            description:
+              - >-
+                Optional remote YAML device inventory merged with Ansible-owned
+                SNMP configuration and rendered as one ktranslate SNMP file.
+              - >-
+                The remote document must contain only a top-level devices mapping
+                for this feature; global collector policy remains in config.
+              - >-
+                Download and YAML validation complete before the active file is
+                changed, so failures do not trigger restart or signal processing.
+            options:
+              url:
+                type: str
+                required: true
+                description:
+                  - HTTP or HTTPS URL returning the YAML device inventory.
+              validate_certs:
+                type: bool
+                default: true
+                description:
+                  - Validate TLS certificates for HTTPS downloads.
+              config:
+                type: dict
+                default: {}
+                description:
+                  - Ansible-owned ktranslate SNMP configuration merged with remote devices.
+              name:
+                type: str
+                default: snmp.yaml
+                description:
+                  - Host filename for the assembled configuration.
+              destination:
+                type: path
+                default: /etc/ktranslate/snmp.yaml
+                description:
+                  - Container path for the assembled configuration.
+              mode:
+                type: str
+                default: "0640"
+                description:
+                  - Host mode for the assembled configuration.
+              read_only:
+                type: bool
+                default: true
+                description:
+                  - Mount the assembled file read-only in the container.
+              no_log:
+                type: bool
+                default: false
+                description:
+                  - Hide downloaded and assembled device data from task output.
+              reload:
+                type: str
+                default: signal
+                choices:
+                  - restart
+                  - signal
+                description:
+                  - Lifecycle action when the assembled file changes.
+              reload_signal:
+                type: str
+                default: USR2
+                description:
+                  - Signal used when reload is signal.
+
           files:
             type: list
             elements: dict
