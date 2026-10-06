@@ -79,7 +79,7 @@ anro_ktranslate_profiles:
     ktranslate_args:
       snmp: /etc/ktranslate/snmp.yaml
       snmp_discovery_on_start: true
-      snmp_out_file: /etc/ktranslate/discovery.yaml
+      snmp_out_file: /etc/ktranslate/runtime/discovery.yaml
     discovery_output: true
 
   traps:
@@ -131,12 +131,12 @@ anro_ktranslate_instances:
 The effective command includes all discovery type-profile arguments plus
 `-snmp_discovery_min=30`. The built-in discovery type profile has no sink or
 Prometheus listener: its only purpose is to discover inventory and write raw
-`/etc/ktranslate/discovery.yaml`.
+`/etc/ktranslate/runtime/discovery.yaml`.
 
-When `discovery_output` is enabled, the role pre-creates the runtime output and
-bind-mounts only that file writable at the configured `snmp_out_file` path.
+When `discovery_output` is enabled, the role creates a dedicated runtime directory and bind-mounts only that directory writable
+at the parent of the configured `snmp_out_file` path.
 Ansible-managed configuration such as `snmp.yaml` remains on its existing
-read-only file mounts, while ktranslate owns `discovery.yaml`. Reconciliation
+read-only file mounts, while ktranslate owns the isolated runtime directory and `discovery.yaml`. Reconciliation
 preserves that runtime file but never renders it or promotes it into a polling
 instance. Sanitization, approval, and publication of discovered inventory are
 intentionally outside this role.

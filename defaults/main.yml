@@ -56,9 +56,9 @@ anro_ktranslate_profiles:
     ktranslate_args:
       snmp: /etc/ktranslate/snmp.yaml
       snmp_discovery_on_start: true
-      snmp_out_file: /etc/ktranslate/discovery.yaml
+      snmp_out_file: /etc/ktranslate/runtime/discovery.yaml
     # Discovery writes runtime inventory rather than exporting metrics. Only the
-    # output file is bind-mounted writable so managed configuration stays read-only.
+    # runtime directory is bind-mounted writable so managed configuration stays read-only.
     discovery_output: true
 
   traps:

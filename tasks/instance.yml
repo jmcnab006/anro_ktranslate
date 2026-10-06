@@ -18,21 +18,19 @@
     group: root
     mode: "0750"
 
-# Bind only the runtime output file writable. Mounting the whole configuration
-# directory at /etc/ktranslate overlaps the read-only managed-file binds and can
-# make files such as config.json inaccessible to ktranslate. The file is
-# intentionally world-writable because the image runtime UID/GID is not part of
-# this role's contract; the containing host directory remains root-only.
-- name: INSTANCE | Create runtime discovery output for {{ anro_ktranslate_instance.name }}
+# Give ktranslate a dedicated writable directory for discovery output. A direct
+# file bind prevents the container from performing the chtimes/replace operations
+# used when writing snmp_out_file, while mounting all of /etc/ktranslate would
+# overlap the role's read-only configuration mounts. The image runtime UID/GID is
+# not part of the role contract, so the isolated runtime directory is writable by
+# the container while the parent configuration directory remains root-only.
+- name: INSTANCE | Create runtime discovery directory for {{ anro_ktranslate_instance.name }}
   ansible.builtin.file:
-    path: >-
-      {{ anro_ktranslate_current_config_dir }}/{{ anro_ktranslate_instance.ktranslate_args.snmp_out_file | basename }}
-    state: touch
+    path: "{{ anro_ktranslate_current_config_dir }}/runtime"
+    state: directory
     owner: root
     group: root
-    mode: "0666"
-    access_time: preserve
-    modification_time: preserve
+    mode: "0777"
   when: anro_ktranslate_instance.discovery_output | default(false) | bool
 
 # device_source is resolved before any active configuration is reconciled. The
@@ -45,8 +43,9 @@
   when: anro_ktranslate_instance.device_source is defined
 
 # Only declared managed files participate in file reconciliation. Discovery
-# output is runtime-owned, so preserve its basename without rendering it. External
-# files and hidden checksum state remain outside managed-file cleanup as before.
+# output is runtime-owned beneath a dedicated subdirectory, which the non-recursive
+# managed-file cleanup intentionally leaves untouched. External files and hidden
+# checksum state remain outside managed-file cleanup as before.
 - name: INSTANCE | Build desired managed file list for {{ anro_ktranslate_instance.name }}
   ansible.builtin.set_fact:
     anro_ktranslate_desired_managed_file_names: >-
@@ -72,12 +71,6 @@
           | selectattr('source', 'equalto', 'url')
           | map(attribute='name')
           | list
-        )
-        +
-        (
-          [anro_ktranslate_instance.ktranslate_args.snmp_out_file | basename]
-          if (anro_ktranslate_instance.discovery_output | default(false) | bool)
-          else []
         )
       }}
 

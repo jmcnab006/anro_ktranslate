@@ -45,9 +45,9 @@
       Invalid ktranslate instance definition for
       {{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}.
 
-# discovery_output reserves a runtime-owned file that is bind-mounted writable.
-# Require the output path explicitly so reconciliation and the systemd unit can
-# preserve and mount the correct basename without guessing ktranslate behavior.
+# discovery_output reserves a dedicated runtime directory that is bind-mounted
+# writable. Restrict the output to that namespace so runtime writes cannot overlap
+# the role's read-only configuration mounts.
 - name: VALIDATE INSTANCE | Validate discovery output for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
     that:
@@ -57,11 +57,11 @@
           anro_ktranslate_raw_instance.ktranslate_args is defined
           and anro_ktranslate_raw_instance.ktranslate_args.snmp_out_file is defined
           and anro_ktranslate_raw_instance.ktranslate_args.snmp_out_file is string
-          and anro_ktranslate_raw_instance.ktranslate_args.snmp_out_file is match('^/etc/ktranslate/[^/]+$')
+          and anro_ktranslate_raw_instance.ktranslate_args.snmp_out_file is match('^/etc/ktranslate/runtime/[^/]+$')
         )
     fail_msg: >-
       Instance {{ anro_ktranslate_raw_instance.name }} enables discovery_output
-      and must define an absolute snmp_out_file directly under /etc/ktranslate.
+      and must define snmp_out_file under /etc/ktranslate/runtime/.
 
 # Docker ignores --publish with host networking and duplicate host listeners are
 # easy to create accidentally, so reject the ambiguous combination explicitly.

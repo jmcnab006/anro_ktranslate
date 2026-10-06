@@ -238,11 +238,11 @@ argument_specs:
             default: false
             description:
               - >-
-                Pre-create and bind-mount only the configured snmp_out_file
-                writable so ktranslate can create runtime discovery output.
+                Create and bind-mount a dedicated runtime directory writable so
+                ktranslate can safely replace and update snmp_out_file.
               - >-
                 The built-in discovery profile enables this and writes raw
-                inventory to /etc/ktranslate/discovery.yaml. The role does not
+                inventory to /etc/ktranslate/runtime/discovery.yaml. The role does not
                 promote that file into polling configuration.
 
           device_source:

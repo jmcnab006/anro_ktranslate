@@ -23,34 +23,39 @@
       changed_when: false
       failed_when: anro_ktranslate_verify_untyped_services.stdout != 'disabled'
 
-    # Unknown non-empty types must fail during validation, before lifecycle tasks
-    # can alter the already-running Molecule services.
-    - name: VERIFY | Initialize unknown type validation state
-      ansible.builtin.set_fact:
-        anro_ktranslate_unknown_type_failed: false
-
-    - name: VERIFY | Reject unknown non-empty type
-      block:
-        - name: VERIFY | Apply role with unknown type
-          ansible.builtin.include_role:
-            name: anro_ktranslate
-          vars:
-            anro_ktranslate_instances:
-              - name: ktranslate-invalid-type-molecule
-                type: does-not-exist
-                enabled: false
-      rescue:
-        - name: VERIFY | Record expected unknown type failure
-          ansible.builtin.set_fact:
-            anro_ktranslate_unknown_type_failed: true
+    # Run expected-failure cases in child ansible-playbook processes. This keeps
+    # the parent Molecule verify play free of fatal/rescued task output while the
+    # child still exercises the real role against the Molecule instance.
+    - name: VERIFY | Run unknown type rejection test
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - -i
+          - "{{ lookup('ansible.builtin.env', 'MOLECULE_INVENTORY_FILE') }}"
+          - "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_DIRECTORY') }}/verify_invalid_type.yml"
+          - --extra-vars
+          - >-
+            {"anro_ktranslate_instances":[
+              {"name":"ktranslate-invalid-type-molecule",
+               "type":"does-not-exist",
+               "enabled":false}
+            ]}
+      delegate_to: localhost
+      become: false
+      register: anro_ktranslate_invalid_type_test
+      changed_when: false
+      failed_when: false
 
     - name: VERIFY | Assert unknown type was rejected
       ansible.builtin.assert:
         that:
-          - anro_ktranslate_unknown_type_failed | bool
+          - anro_ktranslate_invalid_type_test.rc != 0
+          - >-
+            "selects unknown type 'does-not-exist'" in
+            (anro_ktranslate_invalid_type_test.stdout ~ anro_ktranslate_invalid_type_test.stderr)
         fail_msg: >-
-          A non-empty type that is not defined in anro_ktranslate_profiles must
-          fail validation before any instance lifecycle changes are applied.
+          The child validation play did not reject the unknown non-empty type
+          with the expected validation error.
 
     - name: VERIFY | Confirm both polling services are active
       ansible.builtin.command:
@@ -74,7 +79,7 @@
           - /usr/bin/grep
           - -E
           - 'router01|router02|172.29.0.(21|22)'
-          - /etc/ktranslate/ktranslate-discovery-molecule/discovery.yaml
+          - /etc/ktranslate/ktranslate-discovery-molecule/runtime/discovery.yaml
       register: anro_ktranslate_verify_discovery_output
       changed_when: false
       retries: 20
@@ -94,7 +99,7 @@
     - name: VERIFY | Assert discovery remains output-only
       ansible.builtin.assert:
         that:
-          - "'-snmp_out_file=/etc/ktranslate/discovery.yaml' in anro_ktranslate_verify_discovery_command.stdout"
+          - "'-snmp_out_file=/etc/ktranslate/runtime/discovery.yaml' in anro_ktranslate_verify_discovery_command.stdout"
           - "'-sinks=' not in anro_ktranslate_verify_discovery_command.stdout"
           - "'-prom_listen=' not in anro_ktranslate_verify_discovery_command.stdout"
         fail_msg: >-
@@ -225,26 +230,36 @@
         src: /etc/ktranslate/ktranslate-polling-url/snmp.yaml
       register: anro_ktranslate_url_config_before_failed_download
 
-    - name: VERIFY | Point device source at an unavailable URL
-      ansible.builtin.set_fact:
-        anro_ktranslate_molecule_device_source_url: http://172.29.0.20:8080/missing-devices.yaml
+    - name: VERIFY | Run unavailable device source rejection test
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - -i
+          - "{{ lookup('ansible.builtin.env', 'MOLECULE_INVENTORY_FILE') }}"
+          - "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_DIRECTORY') }}/verify_missing_device_source.yml"
+          - --extra-vars
+          - >-
+            {"anro_ktranslate_molecule_device_source_url":
+            "http://172.29.0.20:8080/missing-devices.yaml"}
+      delegate_to: localhost
+      become: false
+      register: anro_ktranslate_missing_device_source_test
+      changed_when: false
+      failed_when: false
 
-    - name: VERIFY | Initialize expected device source failure state
-      ansible.builtin.set_fact:
-        anro_ktranslate_device_source_failed: false
-
-    # The role is expected to fail during device_source download. Rescue records
-    # that expected failure so subsequent assertions can prove fail-closed state.
-    - name: VERIFY | Exercise failed device source download
-      block:
-        - name: VERIFY | Reapply role with unavailable device source
-          ansible.builtin.include_role:
-            name: anro_ktranslate
-      rescue:
-        - name: VERIFY | Record expected device source failure
-          ansible.builtin.set_fact:
-            anro_ktranslate_device_source_failed: true
-
+    - name: VERIFY | Assert unavailable device source was rejected
+      ansible.builtin.assert:
+        that:
+          - anro_ktranslate_missing_device_source_test.rc != 0
+          - >-
+            'HTTP Error 404' in
+            (
+              anro_ktranslate_missing_device_source_test.stdout
+              ~ anro_ktranslate_missing_device_source_test.stderr
+            )
+        fail_msg: >-
+          The child device_source play did not reject the unavailable inventory
+          URL with the expected HTTP 404 failure.
     - name: VERIFY | Read URL-merged configuration after failed download
       ansible.builtin.slurp:
         src: /etc/ktranslate/ktranslate-polling-url/snmp.yaml
@@ -263,7 +278,6 @@
     - name: VERIFY | Confirm failed device source left active state untouched
       ansible.builtin.assert:
         that:
-          - anro_ktranslate_device_source_failed | bool
           - >-
             anro_ktranslate_url_config_before_failed_download.content ==
             anro_ktranslate_url_config_after_failed_download.content

@@ -62,6 +62,9 @@ anro_ktranslate_molecule_discovery_snmp_config:
     poll_time_sec: 60
     timeout_ms: 3000
     retries: 1
+    # ktranslate discovery requires a MIB profile directory in the global
+    # section even when discovery is only generating raw device inventory.
+    mib_profile_dir: /etc/ktranslate/profiles
   discovery:
     cidrs:
       - 172.29.0.21/32
