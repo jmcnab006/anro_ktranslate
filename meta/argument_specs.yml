@@ -110,19 +110,19 @@ argument_specs:
         type: dict
         description:
           - >-
-            Base instance values merged before profile and per-instance values.
+            Base instance values merged before optional type-profile and per-instance values.
             Override only keys that should apply to every container.
           - >-
-            Merge precedence is instance defaults, selected profile, then the
-            explicit instance. Lists are replaced rather than appended.
+            Merge precedence is instance defaults, optional same-named type profile,
+            then the explicit instance. Lists are replaced rather than appended.
 
       anro_ktranslate_profiles:
         type: dict
         description:
-          - Defines independent reusable instance defaults keyed by profile name.
+          - Defines independent reusable instance defaults keyed by instance type.
           - Built-in profiles are polling, discovery, and traps.
           - Profiles do not inherit from other profiles.
-          - An instance uses a profile only when its profile key is explicitly set.
+          - A non-empty instance type selects the same-named profile; omitted, null, or empty type values skip profiles.
           - Mappings recursively merge; explicit scalar and list values replace inherited values.
           - ktranslate_args is merged by argument name so instances override only the CLI options they need.
 
@@ -141,8 +141,8 @@ argument_specs:
         description:
           - Desired set of independent ktranslate containers.
           - >-
-            The name is the exact systemd unit and Docker container basename;
-            type is descriptive metadata and does not select role logic.
+            The name is the exact systemd unit and Docker container basename.
+            Type is optional; a non-empty type selects the same-named profile.
         options:
           name:
             type: str
@@ -152,32 +152,25 @@ argument_specs:
               - Must begin with anro_ktranslate_service_prefix followed by a dash.
 
           type:
-            type: str
-            required: true
+            type: raw
             description:
-              - >-
-                Descriptive workload classification such as polling, discovery,
-                traps, flow, or syslog. Type never selects configuration implicitly.
-
-          profile:
-            type: str
-            description:
-              - Optional reusable profile name from anro_ktranslate_profiles.
-              - When omitted, no profile defaults are applied.
-              - Unknown profile names fail validation.
+              - Optional configuration type selecting the same-named key from anro_ktranslate_profiles.
+              - Non-null values must be strings; validation rejects other data types.
+              - Omitted, null, or empty values apply no profile defaults.
+              - A non-empty type that is not defined in anro_ktranslate_profiles fails validation.
 
           ktranslate_args:
             type: dict
             description:
               - >-
-                Keyed ktranslate CLI arguments. Profile and instance mappings are
+                Keyed ktranslate CLI arguments. Type-profile and instance mappings are
                 recursively merged and rendered as -key=value arguments.
               - >-
-                Instance values override same-named profile values. Set a value
-                to null to remove an argument inherited from the selected profile.
+                Instance values override same-named type-profile values. Set a value
+                to null to remove an argument inherited from the selected type profile.
               - Values must be strings, numbers, booleans, or null.
-              - Mutually exclusive with command after defaults/profile normalization.
-              - A null value removes the same-named argument inherited from the selected profile.
+              - Mutually exclusive with command after defaults/type-profile normalization.
+              - A null value removes the same-named argument inherited from the selected type profile.
 
           enabled:
             type: bool
@@ -239,6 +232,18 @@ argument_specs:
             description:
               - Docker publish specifications such as 127.0.0.1:18082:8082/tcp.
               - Must be empty when network is host.
+
+          discovery_output:
+            type: bool
+            default: false
+            description:
+              - >-
+                Pre-create and bind-mount only the configured snmp_out_file
+                writable so ktranslate can create runtime discovery output.
+              - >-
+                The built-in discovery profile enables this and writes raw
+                inventory to /etc/ktranslate/discovery.yaml. The role does not
+                promote that file into polling configuration.
 
           device_source:
             type: dict

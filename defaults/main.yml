@@ -24,7 +24,7 @@ anro_ktranslate_default_start_limit_interval_sec: 60
 anro_ktranslate_default_start_limit_burst: 5
 
 # Generic command arguments are retained as an escape hatch for instances that
-# intentionally do not use a profile or need a raw upstream command. Profiled
+# intentionally do not use a type profile or need a raw upstream command. Typed
 # instances normally use ktranslate_args instead because keyed arguments can be
 # overridden without copying the complete command list.
 anro_ktranslate_default_command:
@@ -36,12 +36,12 @@ anro_ktranslate_default_command:
 # scalar values and lists supplied by an instance replace the inherited value.
 anro_ktranslate_instance_defaults: {}
 
-# Built-in profiles are independent. There is deliberately no profile-to-profile
-# inheritance: selecting one profile gives an operator one obvious source for
-# workload defaults when troubleshooting the resulting container.
+# Built-in profiles are independent and keyed by instance type. A non-empty type
+# selects the same-named profile; omitted/null/empty type values intentionally
+# bypass profiles so custom instances can use global and instance configuration.
 #
 # ktranslate_args is a mapping because CLI options have names and therefore can
-# be merged safely. Instance keys override profile keys and a null instance value
+# be merged safely. Instance keys override type-profile keys and a null instance value
 # removes an inherited argument entirely. The role renders the final mapping to
 # the upstream -key=value command-line representation.
 anro_ktranslate_profiles:
@@ -56,9 +56,10 @@ anro_ktranslate_profiles:
     ktranslate_args:
       snmp: /etc/ktranslate/snmp.yaml
       snmp_discovery_on_start: true
-      format: prometheus
-      sinks: prometheus
-      prom_listen: ":8082"
+      snmp_out_file: /etc/ktranslate/discovery.yaml
+    # Discovery writes runtime inventory rather than exporting metrics. Only the
+    # output file is bind-mounted writable so managed configuration stays read-only.
+    discovery_output: true
 
   traps:
     ktranslate_args:
@@ -76,7 +77,7 @@ anro_ktranslate_default_volumes:
   - source: /etc/ktranslate
     target: /etc/ktranslate
     read_only: false
-# Single desired-state interface for every ktranslate container. The 'type'
-# field is descriptive metadata only; it does not select special role logic.
+# Single desired-state interface for every ktranslate container. 'type' is
+# optional; when non-empty it selects the same-named profile definition.
 anro_ktranslate_instances: []
 anro_ktranslate_snmp_config: {}

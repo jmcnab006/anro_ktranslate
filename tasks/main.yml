@@ -13,11 +13,12 @@
   ansible.builtin.import_tasks: reconcile.yml
   when: anro_ktranslate_reconcile | bool
 
-# Normalize each raw declaration before lifecycle processing. A profile is used
-# only when the instance explicitly selects it; workload type remains metadata.
+# Normalize each raw declaration before lifecycle processing. A non-empty type
+# selects the same-named profile; an omitted/null/empty type uses global and
+# instance configuration only.
 - name: MAIN | Normalize and configure desired ktranslate instances
   ansible.builtin.include_tasks: configure_instance.yml
   loop: "{{ anro_ktranslate_instances }}"
   loop_control:
     loop_var: anro_ktranslate_raw_instance
-    label: "{{ anro_ktranslate_raw_instance.type }}/{{ anro_ktranslate_raw_instance.name }}"
+    label: "{{ anro_ktranslate_raw_instance.type | default('untyped', true) }}/{{ anro_ktranslate_raw_instance.name }}"

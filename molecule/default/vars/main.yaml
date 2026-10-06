@@ -54,10 +54,29 @@ anro_ktranslate_molecule_ansible_snmp_config: >-
     | combine({'devices': anro_ktranslate_molecule_devices.devices}, recursive=false)
   }}
 
+
+# Discovery uses the same SNMP simulator peers but has no polling sink. Its only
+# runtime product is raw discovery.yaml, which remains isolated from pollers.
+anro_ktranslate_molecule_discovery_snmp_config:
+  global:
+    poll_time_sec: 60
+    timeout_ms: 3000
+    retries: 1
+  discovery:
+    cidrs:
+      - 172.29.0.21/32
+      - 172.29.0.22/32
+    ports:
+      - 161
+    default_communities:
+      - public
+    add_devices: true
+    add_mibs: true
+    threads: 4
+
 anro_ktranslate_instances:
   - name: ktranslate-polling-ansible
     type: polling
-    profile: polling
     enabled: true
     network: ktranslate-molecule
     ports:
@@ -77,7 +96,6 @@ anro_ktranslate_instances:
   # device membership from the external HTTP fixture.
   - name: ktranslate-polling-url
     type: polling
-    profile: polling
     enabled: true
     network: ktranslate-molecule
     ports:
@@ -92,3 +110,37 @@ anro_ktranslate_instances:
       read_only: true
       reload: signal
       reload_signal: USR2
+
+  # Discovery is intentionally output-only: no sink or Prometheus listener is
+  # configured, and the generated discovery.yaml is never consumed by pollers.
+  - name: ktranslate-discovery-molecule
+    type: discovery
+    enabled: true
+    network: ktranslate-molecule
+    files:
+      - name: snmp.yaml
+        source: managed
+        destination: /etc/ktranslate/snmp.yaml
+        format: yaml
+        mode: "0644"
+        read_only: true
+        content: "{{ anro_ktranslate_molecule_discovery_snmp_config }}"
+
+  # No type is intentional: this validates the global -> instance normalization
+  # path without selecting any reusable profile defaults.
+  - name: ktranslate-untyped-molecule
+    enabled: false
+    command:
+      - "-format=prometheus"
+      - "-sinks=prometheus"
+      - "-prom_listen=:8082"
+
+
+  # Explicit null follows the same no-profile path as an omitted type.
+  - name: ktranslate-null-type-molecule
+    type: null
+    enabled: false
+    command:
+      - "-format=prometheus"
+      - "-sinks=prometheus"
+      - "-prom_listen=:8082"

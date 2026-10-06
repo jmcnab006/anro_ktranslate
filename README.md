@@ -19,10 +19,11 @@ The role has one desired-state interface:
 anro_ktranslate_instances: []
 ```
 
-Every container follows the same lifecycle. `type` is descriptive metadata only.
-Profiles are **explicit and independent**: an instance uses a profile only when it
-sets `profile`, and profiles never inherit from one another. This keeps effective
-configuration easy to trace during incidents.
+Every container follows the same lifecycle. `type` is optional configuration metadata.
+When `type` is non-empty, it selects the same-named entry from
+`anro_ktranslate_profiles`; unknown non-empty types fail validation. Omitted, null,
+or empty `type` values skip profile defaults and use global plus instance
+configuration. Profiles remain independent and never inherit from one another.
 
 Normalization precedence is:
 
@@ -31,7 +32,7 @@ internal runtime defaults
         <
 anro_ktranslate_instance_defaults
         <
-explicitly selected profile
+same-named type profile (when type is non-empty)
         <
 instance configuration
 ```
@@ -43,7 +44,7 @@ option. A `null` argument removes the inherited option.
 
 `command` remains a raw escape hatch and is mutually exclusive with
 `ktranslate_args`. There is deliberately no profile inheritance, command-list
-position merging, or implicit profile selection.
+position merging, or profile-to-profile inheritance.
 
 For every instance, `name` is the canonical systemd unit, Docker container, and
 configuration basename. Names must begin with `anro_ktranslate_service_prefix`
@@ -63,7 +64,7 @@ mapping exists only to make common CLI overrides composable.
 
 ## Built-in profiles
 
-Three independent profiles cover the common deployment roles:
+Three independent type profiles cover the common deployment roles:
 
 ```yaml
 anro_ktranslate_profiles:
@@ -78,9 +79,8 @@ anro_ktranslate_profiles:
     ktranslate_args:
       snmp: /etc/ktranslate/snmp.yaml
       snmp_discovery_on_start: true
-      format: prometheus
-      sinks: prometheus
-      prom_listen: ":8082"
+      snmp_out_file: /etc/ktranslate/discovery.yaml
+    discovery_output: true
 
   traps:
     ktranslate_args:
@@ -91,20 +91,19 @@ anro_ktranslate_profiles:
       prom_listen: ":8082"
 ```
 
-The role standardizes on `traps` for the workload/profile name. The listener port
+The role standardizes on `traps` for the workload/type-profile name. The listener port
 is not published automatically; host exposure is deployment-specific and belongs
 in the instance `ports` list.
 
 ### Polling instance
 
-A normal poller needs only to select the profile and provide its device/config
+A normal poller needs only to select its type and provide its device/config
 file and any deployment-specific port mapping:
 
 ```yaml
 anro_ktranslate_instances:
   - name: ktranslate-poll-router-001
     type: polling
-    profile: polling
     ports:
       - "127.0.0.1:18082:8082/tcp"
     files:
@@ -125,13 +124,22 @@ Only the changed CLI argument is declared on the instance:
 anro_ktranslate_instances:
   - name: ktranslate-discovery-mn-001
     type: discovery
-    profile: discovery
     ktranslate_args:
       snmp_discovery_min: 30
 ```
 
-The effective command includes all discovery profile arguments plus
-`-snmp_discovery_min=30`.
+The effective command includes all discovery type-profile arguments plus
+`-snmp_discovery_min=30`. The built-in discovery type profile has no sink or
+Prometheus listener: its only purpose is to discover inventory and write raw
+`/etc/ktranslate/discovery.yaml`.
+
+When `discovery_output` is enabled, the role pre-creates the runtime output and
+bind-mounts only that file writable at the configured `snmp_out_file` path.
+Ansible-managed configuration such as `snmp.yaml` remains on its existing
+read-only file mounts, while ktranslate owns `discovery.yaml`. Reconciliation
+preserves that runtime file but never renders it or promotes it into a polling
+instance. Sanitization, approval, and publication of discovered inventory are
+intentionally outside this role.
 
 ### Override or remove inherited arguments
 
@@ -139,7 +147,6 @@ The effective command includes all discovery profile arguments plus
 anro_ktranslate_instances:
   - name: ktranslate-poll-special-001
     type: polling
-    profile: polling
     ktranslate_args:
       prom_listen: ":9090"  # Overrides the profile value.
       sinks: null            # Removes -sinks entirely.
@@ -149,22 +156,22 @@ Boolean values render as lowercase `true`/`false`, matching normal CLI syntax.
 CLI values are limited to strings, numbers, booleans, and null; structured data
 should be placed in a managed/external file instead.
 
-### Instance without a profile
+### Instance without a type profile
 
-Profiles are optional and never selected from `type` automatically:
+`type` may be omitted, null, or empty when an instance should use only global
+defaults plus its own configuration. A non-empty unknown type is rejected:
 
 ```yaml
 anro_ktranslate_instances:
   - name: ktranslate-custom-001
-    type: custom
     command:
       - "-format=prometheus"
       - "-sinks=prometheus"
       - "-prom_listen=:8082"
 ```
 
-This explicit behavior makes it immediately visible whether a container is using
-a reusable profile or a raw command.
+This keeps custom instances available without creating placeholder profiles while
+ensuring every non-empty type has a defined configuration contract.
 
 ## Main variables
 
@@ -197,7 +204,6 @@ or digest rather than `latest`.
 anro_ktranslate_instances:
   - name: ktranslate-polling-site-a
     type: polling
-    profile: polling
     enabled: true
 
     image: "kentik/ktranslate:<pinned-version>"
@@ -286,7 +292,6 @@ default.
 anro_ktranslate_instances:
   - name: ktranslate-polling
     type: polling
-    profile: polling
     files:
       - name: snmp.yaml
         source: url
@@ -318,7 +323,6 @@ remote devices. Remote data cannot replace global collector policy.
 anro_ktranslate_instances:
   - name: ktranslate-polling-site-a
     type: polling
-    profile: polling
     device_source:
       url: https://config.example.com/site-a/devices.yaml
       validate_certs: true
@@ -464,7 +468,7 @@ role only validates, mounts, fingerprints, and reloads it. The role never edits
 or deletes externally owned files.
 
 Use `reload: restart` (the default) for configuration changes that require a new
-process, mount topology changes, profile/MIB changes whose live-reload behavior
+process, mount topology changes, type-profile/MIB changes whose live-reload behavior
 is not documented, or any file where signal safety is uncertain.
 
 ### Restart versus signal behavior
@@ -632,7 +636,7 @@ It verifies:
 - fail-closed URL retrieval that preserves active configuration and container identity;
 - externally owned file mounts;
 - disabled instances;
-- explicit polling-profile selection and keyed CLI argument merging;
+- type-selected polling profile defaults and keyed CLI argument merging;
 - SIGUSR2 reload of changed device inventory without replacing either polling container.
 
 The nested workload image is also Ubuntu 24.04 so the lifecycle test does not

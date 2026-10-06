@@ -9,11 +9,12 @@
       - anro_ktranslate_raw_instance.name is string
       - anro_ktranslate_raw_instance.name is match('^[A-Za-z0-9][A-Za-z0-9_.@-]*$')
       - anro_ktranslate_raw_instance.name.startswith(anro_ktranslate_service_prefix ~ '-')
-      - anro_ktranslate_raw_instance.type is defined
-      - anro_ktranslate_raw_instance.type is string
-      - anro_ktranslate_raw_instance.type is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
-      - anro_ktranslate_raw_instance.profile is not defined or anro_ktranslate_raw_instance.profile is string
-      - anro_ktranslate_raw_instance.profile is not defined or anro_ktranslate_raw_instance.profile is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+      - anro_ktranslate_raw_instance.type is not defined or anro_ktranslate_raw_instance.type is none or anro_ktranslate_raw_instance.type is string
+      - >-
+        anro_ktranslate_raw_instance.type is not defined
+        or anro_ktranslate_raw_instance.type is none
+        or anro_ktranslate_raw_instance.type == ''
+        or anro_ktranslate_raw_instance.type is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
       - (anro_ktranslate_raw_instance.ktranslate_args | default({})) is mapping
       - (anro_ktranslate_raw_instance.enabled | default(true)) is boolean
       - (anro_ktranslate_raw_instance.image | default(anro_ktranslate_image)) is string
@@ -31,6 +32,7 @@
       - (anro_ktranslate_raw_instance.files | default([])) is sequence
       - (anro_ktranslate_raw_instance.files | default([])) is not string
       - anro_ktranslate_raw_instance.device_source is not defined or anro_ktranslate_raw_instance.device_source is mapping
+      - (anro_ktranslate_raw_instance.discovery_output | default(false)) is boolean
       - (anro_ktranslate_raw_instance.volumes | default([])) is sequence
       - (anro_ktranslate_raw_instance.volumes | default([])) is not string
       - (anro_ktranslate_raw_instance.cap_add | default([])) is sequence
@@ -42,6 +44,24 @@
     fail_msg: >-
       Invalid ktranslate instance definition for
       {{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}.
+
+# discovery_output reserves a runtime-owned file that is bind-mounted writable.
+# Require the output path explicitly so reconciliation and the systemd unit can
+# preserve and mount the correct basename without guessing ktranslate behavior.
+- name: VALIDATE INSTANCE | Validate discovery output for {{ anro_ktranslate_raw_instance.name }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (anro_ktranslate_raw_instance.discovery_output | default(false) | bool)
+        or (
+          anro_ktranslate_raw_instance.ktranslate_args is defined
+          and anro_ktranslate_raw_instance.ktranslate_args.snmp_out_file is defined
+          and anro_ktranslate_raw_instance.ktranslate_args.snmp_out_file is string
+          and anro_ktranslate_raw_instance.ktranslate_args.snmp_out_file is match('^/etc/ktranslate/[^/]+$')
+        )
+    fail_msg: >-
+      Instance {{ anro_ktranslate_raw_instance.name }} enables discovery_output
+      and must define an absolute snmp_out_file directly under /etc/ktranslate.
 
 # Docker ignores --publish with host networking and duplicate host listeners are
 # easy to create accidentally, so reject the ambiguous combination explicitly.
@@ -230,7 +250,7 @@
 # Command is authoritative for ktranslate behavior. It can completely replace
 # the Prometheus default without the role understanding upstream sink semantics.
 # Keyed arguments are the normal override surface for profiled instances. null is
-# allowed because it explicitly removes an inherited profile argument.
+# allowed because it explicitly removes an inherited type-profile argument.
 - name: VALIDATE INSTANCE | Validate ktranslate arguments for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
     that:

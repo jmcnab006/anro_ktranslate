@@ -1,24 +1,33 @@
 ---
-# Build one effective instance from stack-wide defaults, one explicitly selected
-# profile, and the instance itself. Profiles are independent; there is no
-# profile-to-profile inheritance or implicit selection based on workload type.
+# Build one effective instance from stack-wide defaults, optional type defaults,
+# and the instance itself. A non-empty type selects the same-named profile; an
+# omitted, null, or empty type deliberately skips profile defaults. The files
+# collection is normalized to an empty list so untyped/minimal instances can pass
+# through generic reconciliation without requiring a synthetic files declaration.
+# type is also normalized to null after the raw merge so every downstream task and
+# template can safely consume the key even when inventory omitted it or set it empty.
 - name: CONFIGURE INSTANCE | Normalize {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.set_fact:
     anro_ktranslate_instance: >-
       {{
-        anro_ktranslate_instance_defaults
+        {'files': []}
+        | combine(anro_ktranslate_instance_defaults, recursive=true, list_merge='replace')
         | combine(
-            anro_ktranslate_profiles[anro_ktranslate_raw_instance.profile]
-            if anro_ktranslate_raw_instance.profile is defined
+            anro_ktranslate_profiles[anro_ktranslate_raw_instance.type]
+            if (anro_ktranslate_raw_instance.type | default(None, true))
             else {},
             recursive=true,
             list_merge='replace'
           )
         | combine(anro_ktranslate_raw_instance, recursive=true, list_merge='replace')
+        | combine(
+            {'type': anro_ktranslate_raw_instance.type | default(None, true)},
+            recursive=false
+          )
       }}
 
 # Remove null keyed arguments after merging. null is the documented operator
-# mechanism for deleting an argument supplied by a selected profile without
+# mechanism for deleting an argument supplied by a selected type profile without
 # having to copy or reconstruct the profile's complete CLI configuration.
 - name: CONFIGURE INSTANCE | Initialize rendered ktranslate arguments for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.set_fact:

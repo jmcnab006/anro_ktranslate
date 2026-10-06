@@ -7,6 +7,51 @@
     - vars/main.yaml
 
   tasks:
+    # These disabled instances exercise both supported no-profile forms. Their
+    # successful unit creation proves omitted and null type values normalize from
+    # global defaults directly into instance configuration.
+    - name: VERIFY | Confirm untyped instances were accepted
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/systemctl
+          - is-enabled
+          - "{{ item }}.service"
+      loop:
+        - ktranslate-untyped-molecule
+        - ktranslate-null-type-molecule
+      register: anro_ktranslate_verify_untyped_services
+      changed_when: false
+      failed_when: anro_ktranslate_verify_untyped_services.stdout != 'disabled'
+
+    # Unknown non-empty types must fail during validation, before lifecycle tasks
+    # can alter the already-running Molecule services.
+    - name: VERIFY | Initialize unknown type validation state
+      ansible.builtin.set_fact:
+        anro_ktranslate_unknown_type_failed: false
+
+    - name: VERIFY | Reject unknown non-empty type
+      block:
+        - name: VERIFY | Apply role with unknown type
+          ansible.builtin.include_role:
+            name: anro_ktranslate
+          vars:
+            anro_ktranslate_instances:
+              - name: ktranslate-invalid-type-molecule
+                type: does-not-exist
+                enabled: false
+      rescue:
+        - name: VERIFY | Record expected unknown type failure
+          ansible.builtin.set_fact:
+            anro_ktranslate_unknown_type_failed: true
+
+    - name: VERIFY | Assert unknown type was rejected
+      ansible.builtin.assert:
+        that:
+          - anro_ktranslate_unknown_type_failed | bool
+        fail_msg: >-
+          A non-empty type that is not defined in anro_ktranslate_profiles must
+          fail validation before any instance lifecycle changes are applied.
+
     - name: VERIFY | Confirm both polling services are active
       ansible.builtin.command:
         argv:
@@ -16,9 +61,45 @@
       loop:
         - ktranslate-polling-ansible
         - ktranslate-polling-url
+        - ktranslate-discovery-molecule
       register: anro_ktranslate_verify_services
       changed_when: false
       failed_when: anro_ktranslate_verify_services.stdout != 'active'
+
+    # Discovery output is runtime-owned. Retry because SNMP discovery happens
+    # asynchronously after systemd reports the container active.
+    - name: VERIFY | Wait for discovery output to contain a simulator
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/grep
+          - -E
+          - 'router01|router02|172.29.0.(21|22)'
+          - /etc/ktranslate/ktranslate-discovery-molecule/discovery.yaml
+      register: anro_ktranslate_verify_discovery_output
+      changed_when: false
+      retries: 20
+      delay: 3
+      until: anro_ktranslate_verify_discovery_output.rc == 0
+
+    - name: VERIFY | Confirm discovery profile has no polling sink
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/docker
+          - inspect
+          - "--format={{ '{{json .Config.Cmd}}' }}"
+          - ktranslate-discovery-molecule
+      register: anro_ktranslate_verify_discovery_command
+      changed_when: false
+
+    - name: VERIFY | Assert discovery remains output-only
+      ansible.builtin.assert:
+        that:
+          - "'-snmp_out_file=/etc/ktranslate/discovery.yaml' in anro_ktranslate_verify_discovery_command.stdout"
+          - "'-sinks=' not in anro_ktranslate_verify_discovery_command.stdout"
+          - "'-prom_listen=' not in anro_ktranslate_verify_discovery_command.stdout"
+        fail_msg: >-
+          Discovery must write raw inventory without configuring a polling sink
+          or Prometheus listener.
 
     # The two service instances deliberately use different configuration paths:
     # one is fully Ansible-managed and one is assembled from Ansible policy plus
