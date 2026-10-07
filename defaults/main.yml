@@ -64,7 +64,6 @@ anro_ktranslate_profiles:
   traps:
     ktranslate_args:
       snmp: /etc/ktranslate/snmp.yaml
-      snmp_trap: ":1620"
       format: flat_json
       sinks: file
       file_out: /etc/ktranslate/runtime

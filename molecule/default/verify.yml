@@ -120,7 +120,6 @@
     - name: VERIFY | Assert traps profile uses the runtime file sink
       ansible.builtin.assert:
         that:
-          - "'-snmp_trap=:1620' in anro_ktranslate_verify_traps_command.stdout"
           - "'-sinks=file' in anro_ktranslate_verify_traps_command.stdout"
           - "'-file_out=/etc/ktranslate/runtime' in anro_ktranslate_verify_traps_command.stdout"
           - "'-file_on=true' in anro_ktranslate_verify_traps_command.stdout"
