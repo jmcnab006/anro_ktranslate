@@ -86,14 +86,21 @@ anro_ktranslate_profiles:
     ktranslate_args:
       snmp: /etc/ktranslate/snmp.yaml
       snmp_trap: ":1620"
-      format: prometheus
-      sinks: prometheus
-      prom_listen: ":8082"
+      format: flat_json
+      sinks: file
+      file_out: /etc/ktranslate/runtime
+      file_on: true
+      file_flush_sec: 1
+    runtime_output: true
 ```
 
-The role standardizes on `traps` for the workload/type-profile name. The listener port
-is not published automatically; host exposure is deployment-specific and belongs
-in the instance `ports` list.
+The role standardizes on `traps` for the workload/type-profile name. The built-in
+profile listens on UDP 1620 and writes flat JSON to the file sink under the
+per-instance writable `/etc/ktranslate/runtime` mount. `file_on=true` enables the
+sink immediately instead of requiring `SIGUSR1`. Sink arguments remain normal
+`ktranslate_args` and can be overridden for production. The listener port is not
+published automatically; host exposure is deployment-specific and belongs in the
+instance `ports` list.
 
 ### Polling instance
 
@@ -140,6 +147,30 @@ read-only file mounts, while ktranslate owns the isolated runtime directory and 
 preserves that runtime file but never renders it or promotes it into a polling
 instance. Sanitization, approval, and publication of discovered inventory are
 intentionally outside this role.
+
+### Trap instance with file output
+
+The built-in `traps` profile is usable without a separate telemetry backend. It
+keeps generated files isolated from Ansible-managed configuration:
+
+```yaml
+anro_ktranslate_instances:
+  - name: ktranslate-traps-site-001
+    type: traps
+    ports:
+      - "0.0.0.0:1620:1620/udp"
+    files:
+      - name: snmp.yaml
+        source: managed
+        destination: /etc/ktranslate/snmp.yaml
+        format: yaml
+        content: "{{ site_trap_snmp_config }}"
+```
+
+The host-side output is retained under
+`/etc/ktranslate/ktranslate-traps-site-001/runtime/`. The file sink is intended as
+a directly observable trap-receipt path and can be replaced by overriding the
+profile's keyed sink arguments when downstream trap processing is introduced.
 
 ### Override or remove inherited arguments
 

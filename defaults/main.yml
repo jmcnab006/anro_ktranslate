@@ -65,9 +65,15 @@ anro_ktranslate_profiles:
     ktranslate_args:
       snmp: /etc/ktranslate/snmp.yaml
       snmp_trap: ":1620"
-      format: prometheus
-      sinks: prometheus
-      prom_listen: ":8082"
+      format: flat_json
+      sinks: file
+      file_out: /etc/ktranslate/runtime
+      file_on: true
+      file_flush_sec: 1
+    # Trap events are written to the file sink in an isolated writable runtime
+    # directory. Production deployments can override the sink arguments without
+    # changing the trap listener profile.
+    runtime_output: true
 
 # Remove role-managed units, containers, configuration directories, and
 # environment files when their instance names disappear from inventory.

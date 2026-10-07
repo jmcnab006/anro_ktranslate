@@ -33,6 +33,7 @@
       - (anro_ktranslate_raw_instance.files | default([])) is not string
       - anro_ktranslate_raw_instance.device_source is not defined or anro_ktranslate_raw_instance.device_source is mapping
       - (anro_ktranslate_raw_instance.discovery_output | default(false)) is boolean
+      - (anro_ktranslate_raw_instance.runtime_output | default(false)) is boolean
       - (anro_ktranslate_raw_instance.volumes | default([])) is sequence
       - (anro_ktranslate_raw_instance.volumes | default([])) is not string
       - (anro_ktranslate_raw_instance.cap_add | default([])) is sequence

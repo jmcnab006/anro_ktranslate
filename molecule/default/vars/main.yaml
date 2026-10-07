@@ -77,6 +77,17 @@ anro_ktranslate_molecule_discovery_snmp_config:
     add_mibs: true
     threads: 4
 
+# Trap verification uses a minimal SNMP configuration. The file sink is supplied
+# by the built-in traps profile so this fixture only owns SNMP listener policy.
+anro_ktranslate_molecule_trap_snmp_config:
+  global:
+    poll_time_sec: 60
+    timeout_ms: 3000
+    retries: 1
+    mib_profile_dir: /etc/ktranslate/profiles
+  trap:
+    listen: "0.0.0.0:1620"
+
 anro_ktranslate_instances:
   - name: ktranslate-polling-ansible
     type: polling
@@ -128,6 +139,23 @@ anro_ktranslate_instances:
         mode: "0644"
         read_only: true
         content: "{{ anro_ktranslate_molecule_discovery_snmp_config }}"
+
+  # The trap instance exposes only its UDP listener. Its built-in file sink writes
+  # runtime evidence that verify.yml checks for the deterministic test varbind.
+  - name: ktranslate-traps-molecule
+    type: traps
+    enabled: true
+    network: ktranslate-molecule
+    ports:
+      - "127.0.0.1:11620:1620/udp"
+    files:
+      - name: snmp.yaml
+        source: managed
+        destination: /etc/ktranslate/snmp.yaml
+        format: yaml
+        mode: "0644"
+        read_only: true
+        content: "{{ anro_ktranslate_molecule_trap_snmp_config }}"
 
   # No type is intentional: this validates the global -> instance normalization
   # path without selecting any reusable profile defaults.

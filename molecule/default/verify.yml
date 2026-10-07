@@ -67,6 +67,7 @@
         - ktranslate-polling-ansible
         - ktranslate-polling-url
         - ktranslate-discovery-molecule
+        - ktranslate-traps-molecule
       register: anro_ktranslate_verify_services
       changed_when: false
       failed_when: anro_ktranslate_verify_services.stdout != 'active'
@@ -105,6 +106,59 @@
         fail_msg: >-
           Discovery must write raw inventory without configuring a polling sink
           or Prometheus listener.
+
+    - name: VERIFY | Inspect traps container command
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/docker
+          - inspect
+          - "--format={{ '{{json .Config.Cmd}}' }}"
+          - ktranslate-traps-molecule
+      register: anro_ktranslate_verify_traps_command
+      changed_when: false
+
+    - name: VERIFY | Assert traps profile uses the runtime file sink
+      ansible.builtin.assert:
+        that:
+          - "'-snmp_trap=:1620' in anro_ktranslate_verify_traps_command.stdout"
+          - "'-sinks=file' in anro_ktranslate_verify_traps_command.stdout"
+          - "'-file_out=/etc/ktranslate/runtime' in anro_ktranslate_verify_traps_command.stdout"
+          - "'-file_on=true' in anro_ktranslate_verify_traps_command.stdout"
+        fail_msg: >-
+          The traps instance must listen on UDP 1620 and write received events to
+          the dedicated runtime file sink.
+
+    # The unique enterprise varbind proves ktranslate received this test trap,
+    # rather than merely proving that the UDP listener started successfully.
+    - name: VERIFY | Send deterministic SNMPv2c trap to ktranslate
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/snmptrap
+          - -v
+          - "2c"
+          - -c
+          - public
+          - 127.0.0.1:11620
+          - ""
+          - 1.3.6.1.6.3.1.1.5.1
+          - 1.3.6.1.4.1.8072.9999.1.0
+          - s
+          - anro-ktranslate-molecule-trap
+      changed_when: false
+
+    - name: VERIFY | Wait for deterministic trap in file sink output
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/grep
+          - -R
+          - -F
+          - anro-ktranslate-molecule-trap
+          - /etc/ktranslate/ktranslate-traps-molecule/runtime
+      register: anro_ktranslate_verify_trap_output
+      changed_when: false
+      retries: 15
+      delay: 1
+      until: anro_ktranslate_verify_trap_output.rc == 0
 
     # The two service instances deliberately use different configuration paths:
     # one is fully Ansible-managed and one is assembled from Ansible policy plus

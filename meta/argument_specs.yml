@@ -245,6 +245,16 @@ argument_specs:
                 inventory to /etc/ktranslate/runtime/discovery.yaml. The role does not
                 promote that file into polling configuration.
 
+          runtime_output:
+            type: bool
+            default: false
+            description:
+              - >-
+                Create and bind-mount /etc/ktranslate/runtime as a dedicated
+                writable per-instance directory for application-generated output.
+              - >-
+                The built-in traps profile enables this for its file sink.
+
           device_source:
             type: dict
             description:
