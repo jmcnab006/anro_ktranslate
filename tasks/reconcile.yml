@@ -28,7 +28,7 @@
     anro_ktranslate_stale_services: >-
       {{
         anro_ktranslate_stale_services
-        + [item.item.path | basename | regex_replace('\\.service$', '')]
+        + [item.item.path | basename | regex_replace('\.service$', '')]
       }}
   loop: "{{ anro_ktranslate_existing_unit_contents.results }}"
   loop_control:
@@ -36,7 +36,7 @@
   when:
     - anro_ktranslate_managed_marker in (item.content | b64decode)
     - >-
-      (item.item.path | basename | regex_replace('\\.service$', ''))
+      (item.item.path | basename | regex_replace('\.service$', ''))
       not in (anro_ktranslate_instances | map(attribute='name') | list)
 
 - name: RECONCILE | Stop and disable stale services
