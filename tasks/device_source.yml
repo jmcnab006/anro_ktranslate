@@ -10,6 +10,7 @@
     group: root
     mode: "0600"
     validate_certs: "{{ anro_ktranslate_instance.device_source.validate_certs | default(true) | bool }}"
+    force: true
   no_log: "{{ anro_ktranslate_instance.device_source.no_log | default(false) | bool }}"
 
 # Read only the successfully downloaded staging file. No active configuration
