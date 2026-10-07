@@ -394,6 +394,30 @@
 # Send each requested signal once after systemd has reconciled service state.
 # Never signal after a restart, and never signal a disabled instance. command is
 # appropriate because Docker exposes signaling as an imperative runtime action.
+- name: INSTANCE | Inspect container state before dynamic reload
+  ansible.builtin.command:
+    argv:
+      - "{{ anro_ktranslate_docker_binary }}"
+      - inspect
+      - --format
+      - "{{ '{{.State.Running}}' }}"
+      - "{{ anro_ktranslate_instance.name }}"
+  register: anro_ktranslate_reload_container_state
+  changed_when: false
+  failed_when:
+    # rc=1 with "No such" is expected when the service failed before creating
+    # the container. Other Docker failures must remain fatal.
+    - anro_ktranslate_reload_container_state.rc != 0
+    - "'No such object' not in anro_ktranslate_reload_container_state.stderr"
+    - "'No such container' not in anro_ktranslate_reload_container_state.stderr"
+  when:
+    - anro_ktranslate_instance.enabled | bool
+    - anro_ktranslate_reload_signals | length > 0
+    - not anro_ktranslate_service_restarted | bool
+
+# Dynamic configuration is signaled only when the container is currently
+# running. A stopped or absent container will consume the new configuration
+# during its next successful systemd start.
 - name: INSTANCE | Reload changed dynamic files for {{ anro_ktranslate_instance.name }}
   ansible.builtin.command:
     argv:
@@ -402,13 +426,13 @@
       - --signal
       - "{{ item }}"
       - "{{ anro_ktranslate_instance.name }}"
-  loop: "{{ anro_ktranslate_live_reload_signals | unique }}"
-  loop_control:
-    label: "{{ item }}"
+  loop: "{{ anro_ktranslate_reload_signals }}"
   changed_when: true
   when:
     - anro_ktranslate_instance.enabled | bool
-    - not anro_ktranslate_instance_restart_required
+    - not anro_ktranslate_service_restarted | bool
+    - anro_ktranslate_reload_container_state.rc == 0
+    - anro_ktranslate_reload_container_state.stdout | trim == "true"
 
 # Persist external signal-file checksums only after service reconciliation and
 # live reload succeed. If signaling fails, state remains old so the next converge
