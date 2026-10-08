@@ -144,8 +144,14 @@
       {{
         anro_ktranslate_instance.url is defined
         and (anro_ktranslate_source_devices_block | default('') | length > 0)
-        and (anro_ktranslate_instance.config | default({})).devices is not defined
-        and anro_ktranslate_baseline_config.devices is not defined
+        and (
+          (anro_ktranslate_instance.config | default({})).devices
+          is not defined
+        )
+        and (
+          anro_ktranslate_baseline_config.devices | default({})
+          | length == 0
+        )
       }}
 
 - name: SNMP CONFIG | Render final configuration for {{ anro_ktranslate_instance.name }}
