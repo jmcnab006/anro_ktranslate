@@ -113,14 +113,9 @@ anro_ktranslate_instances:
     type: polling
     ports:
       - "127.0.0.1:18082:8082/tcp"
-    files:
-      - name: snmp.yaml
-        source: managed
-        destination: /etc/ktranslate/snmp.yaml
-        format: yaml
-        content: "{{ router_001_snmp_config }}"
-        reload: signal
-        reload_signal: USR2
+    config: "{{ router_001_snmp_config }}"
+    reload: signal
+    reload_signal: USR2
 ```
 
 ### Discovery override without command duplication
@@ -159,12 +154,7 @@ anro_ktranslate_instances:
     type: traps
     ports:
       - "0.0.0.0:1620:1620/udp"
-    files:
-      - name: snmp.yaml
-        source: managed
-        destination: /etc/ktranslate/snmp.yaml
-        format: yaml
-        content: "{{ site_trap_snmp_config }}"
+    config: "{{ site_trap_snmp_config }}"
 ```
 
 The host-side output is retained under
@@ -272,22 +262,17 @@ serialization.
 anro_ktranslate_instances:
   - name: ktranslate-polling-site-a
     type: polling
+    config: "{{ site_a_snmp_config }}"
     files:
-      - name: snmp.yaml
+      - name: auxiliary.conf
         source: managed
-        destination: /etc/ktranslate/snmp.yaml
+        destination: /etc/ktranslate/auxiliary.conf
         format: raw
         mode: "0640"
         read_only: true
         content: |
-          # Static ktranslate SNMP configuration maintained in Git.
-          # Use the schema required by the pinned ktranslate version.
+          # Additional non-SNMP application configuration.
           ...
-    command:
-      - "-snmp=/etc/ktranslate/snmp.yaml"
-      - "-format=prometheus"
-      - "-sinks=prometheus"
-      - "-prom_listen=:8082"
 ```
 
 ### YAML file
@@ -324,14 +309,12 @@ anro_ktranslate_instances:
   - name: ktranslate-polling
     type: polling
     files:
-      - name: snmp.yaml
+      - name: auxiliary.yaml
         source: url
-        url: https://config.example.com/ktranslate/snmp.yaml
-        destination: /etc/ktranslate/snmp.yaml
+        url: https://config.example.com/ktranslate/auxiliary.yaml
+        destination: /etc/ktranslate/auxiliary.yaml
         mode: "0644"
         read_only: true
-        reload: signal
-        reload_signal: USR2
 ```
 
 URL downloads are fail-closed and staged before replacing active configuration.
@@ -342,51 +325,41 @@ unchanged remote file is idempotent; changed content follows the file's `reload`
 policy. Set `validate_certs: false` only for controlled test environments
 where TLS certificate validation is intentionally unavailable.
 
-## Remote device source merged with Ansible policy
+## Instance SNMP configuration precedence
 
-Use `device_source` when Ansible should own global ktranslate SNMP policy while
-device membership is published independently as YAML. The remote document must
-contain a top-level `devices` mapping. The role downloads and validates it, then
-renders one effective `snmp.yaml` containing `device_source.config` plus the
-remote devices. Remote data cannot replace global collector policy.
+The role always owns `/etc/ktranslate/snmp.yaml` for every instance. Configuration
+is assembled from three layers with deterministic precedence:
+
+```text
+instance config > URL configuration > anro_ktranslate_baseline_config
+```
+
+No source selector is required. Omitting both `url` and `config` produces the
+role baseline, `config` alone overlays local values, `url` alone overlays remote
+YAML, and defining both applies the local configuration last. Mappings merge
+recursively and lists are replaced.
 
 ```yaml
 anro_ktranslate_instances:
-  - name: ktranslate-polling-site-a
+  - name: ktranslate-polling-url
     type: polling
-    device_source:
-      url: https://config.example.com/site-a/devices.yaml
-      validate_certs: true
-      config:
-        global:
-          poll_time_sec: 60
-          timeout_ms: 3000
-          retries: 1
-      destination: /etc/ktranslate/snmp.yaml
-      reload: signal
-      reload_signal: USR2
+    enabled: true
+    url: https://config.example.com/site-a/snmp.yaml
+    config:
+      global:
+        poll_time_sec: 30
+    reload: signal
+    reload_signal: USR2
 ```
 
-The remote document is intentionally limited to device inventory:
+The URL is downloaded to a hidden staging file and parsed before the active
+configuration is rendered. A download or parse failure leaves the active
+`snmp.yaml` unchanged. The role currently performs the merge through Ansible YAML
+deserialization/serialization; preserving all ktranslate discovery-generated YAML
+representations is tracked separately.
 
-```yaml
-devices:
-  router01:
-    device_name: router01
-    device_ip: 192.0.2.10
-    snmp_comm: public
-    snmp_ver: "2c"
-```
-
-`device_source` is fail-closed. Download and YAML validation happen before the
-assembled active file is rendered. A failed HTTP request, invalid YAML document,
-or missing `devices` mapping fails the role without changing the active
-configuration and without requesting a restart or reload signal. When the
-assembled file changes successfully, it uses the same restart/signal lifecycle
-semantics as a normal managed file.
-
-Do not also define a `files` entry with the same `name` or `destination`; one
-configuration path must own each mounted file.
+`/etc/ktranslate/snmp.yaml` is reserved by the role and must not also be declared
+under `files`. Generic `files` remain available for additional application files.
 
 ## External files and future configuration renderers
 
@@ -398,15 +371,11 @@ anro_ktranslate_instances:
   - name: ktranslate-polling-site-a
     type: polling
     files:
-      - name: snmp.yaml
+      - name: auxiliary.yaml
         source: external
-        host_path: /var/lib/ktranslate-config/site-a/snmp.yaml
-        destination: /etc/ktranslate/snmp.yaml
+        host_path: /var/lib/ktranslate-config/site-a/auxiliary.yaml
+        destination: /etc/ktranslate/auxiliary.yaml
         read_only: true
-    command:
-      - "-snmp=/etc/ktranslate/snmp.yaml"
-      - "-format=prometheus"
-      - "-sinks=prometheus"
 ```
 
 The external host file must exist when this role converges. Failing early is
@@ -458,14 +427,9 @@ without changing container topology or static runtime configuration.
 anro_ktranslate_instances:
   - name: ktranslate-poll-router-001
     type: polling
-    files:
-      - name: snmp.yaml
-        source: managed
-        destination: /etc/ktranslate/snmp.yaml
-        format: yaml
-        content: "{{ router_001_devices }}"
-        reload: signal
-        reload_signal: USR2
+    config: "{{ router_001_devices }}"
+    reload: signal
+    reload_signal: USR2
 ```
 
 When the rendered content changes, the role keeps the existing container and
@@ -475,7 +439,7 @@ runs the equivalent of:
 docker kill --signal USR2 ktranslate-poll-router-001
 ```
 
-### Externally owned dynamic device file
+### URL-published dynamic device configuration
 
 Use this when Git/CI, a discovery classifier, NetBox integration, or another
 renderer owns the device file:
@@ -484,19 +448,13 @@ renderer owns the device file:
 anro_ktranslate_instances:
   - name: ktranslate-poll-router-001
     type: polling
-    files:
-      - name: snmp.yaml
-        source: external
-        host_path: /var/lib/ktranslate/devices/router-001.yaml
-        destination: /etc/ktranslate/snmp.yaml
-        read_only: true
-        reload: signal
-        reload_signal: USR2
+    url: https://config.example.com/ktranslate/router-001.yaml
+    reload: signal
+    reload_signal: USR2
 ```
 
-The external producer owns `/var/lib/ktranslate/devices/router-001.yaml`; this
-role only validates, mounts, fingerprints, and reloads it. The role never edits
-or deletes externally owned files.
+The remote publisher owns the URL document; the role stages, parses, merges, and
+renders the effective `snmp.yaml`, then reloads it according to instance policy.
 
 Use `reload: restart` (the default) for configuration changes that require a new
 process, mount topology changes, type-profile/MIB changes whose live-reload behavior
@@ -663,7 +621,7 @@ It verifies:
 - host networking without `--publish`;
 - two independent polling services: one fully Ansible-managed and one URL-merged;
 - managed raw/YAML files;
-- remote `device_source` inventory merged with Ansible-owned global SNMP policy;
+- baseline, URL, and instance-local SNMP configuration precedence;
 - fail-closed URL retrieval that preserves active configuration and container identity;
 - externally owned file mounts;
 - disabled instances;

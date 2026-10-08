@@ -153,8 +153,8 @@
         group: root
         mode: "0755"
 
-    # Publish only device membership. The role under test owns global SNMP
-    # policy and must merge this document into its effective snmp.yaml.
+    # Publish a minimal remote overlay. The role merges this document over its
+    # baseline and then applies any instance-local config overrides.
     - name: PREPARE | Render HTTP device inventory fixture
       ansible.builtin.copy:
         dest: /srv/ktranslate-config/devices.yaml

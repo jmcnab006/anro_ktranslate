@@ -32,6 +32,22 @@ anro_ktranslate_default_command:
   - "-sinks=prometheus"
   - "-prom_listen=:8082"
 
+
+# Every container receives a role-owned SNMP configuration. Optional remote and
+# instance-local configuration layers are recursively merged over this baseline
+# with list replacement. Precedence is: instance config > URL > baseline.
+anro_ktranslate_baseline_config:
+  global:
+    poll_time_sec: 60
+    timeout_ms: 3000
+    retries: 1
+    drop_if_outside_poll: false
+    mib_profile_dir: /etc/ktranslate/profiles
+    mibs_db: /etc/ktranslate/mibs.db
+    mibs_enabled:
+      - HOST-RESOURCES-MIB
+  devices: {}
+
 # Optional stack-wide instance overrides. Mappings are recursively merged;
 # scalar values and lists supplied by an instance replace the inherited value.
 anro_ktranslate_instance_defaults: {}

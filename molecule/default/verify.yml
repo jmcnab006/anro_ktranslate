@@ -159,16 +159,49 @@
       delay: 1
       until: anro_ktranslate_verify_trap_output.rc == 0
 
-    # The two service instances deliberately use different configuration paths:
-    # one is fully Ansible-managed and one is assembled from Ansible policy plus
-    # the remote devices mapping.
+    # Verify local-only, URL+local, and baseline-only effective SNMP configuration.
     - name: VERIFY | Read generated SNMP configurations
       ansible.builtin.slurp:
         src: "/etc/ktranslate/{{ item }}/snmp.yaml"
       loop:
         - ktranslate-polling-ansible
         - ktranslate-polling-url
+        - ktranslate-baseline-molecule
       register: anro_ktranslate_verify_snmp_files
+
+    - name: VERIFY | Inspect generated SNMP configuration permissions
+      ansible.builtin.stat:
+        path: "/etc/ktranslate/{{ item }}/snmp.yaml"
+      loop:
+        - ktranslate-polling-ansible
+        - ktranslate-polling-url
+        - ktranslate-baseline-molecule
+      register: anro_ktranslate_verify_snmp_stats
+
+    - name: VERIFY | Confirm generated SNMP configurations are container-readable
+      ansible.builtin.assert:
+        that:
+          - item.stat.mode == '0644'
+      loop: "{{ anro_ktranslate_verify_snmp_stats.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: VERIFY | Inspect instance configuration directory permissions
+      ansible.builtin.stat:
+        path: "/etc/ktranslate/{{ item }}"
+      loop:
+        - ktranslate-polling-ansible
+        - ktranslate-polling-url
+        - ktranslate-baseline-molecule
+      register: anro_ktranslate_verify_config_dir_stats
+
+    - name: VERIFY | Confirm instance configuration directories are traversable
+      ansible.builtin.assert:
+        that:
+          - item.stat.mode == '0755'
+      loop: "{{ anro_ktranslate_verify_config_dir_stats.results }}"
+      loop_control:
+        label: "{{ item.item }}"
 
     - name: VERIFY | Parse generated SNMP configurations
       ansible.builtin.set_fact:
@@ -176,16 +209,23 @@
           {{ anro_ktranslate_verify_snmp_files.results[0].content | b64decode | from_yaml }}
         anro_ktranslate_verify_url_config: >-
           {{ anro_ktranslate_verify_snmp_files.results[1].content | b64decode | from_yaml }}
+        anro_ktranslate_verify_baseline_config: >-
+          {{ anro_ktranslate_verify_snmp_files.results[2].content | b64decode | from_yaml }}
 
     - name: VERIFY | Confirm both configuration methods produced expected policy and devices
       ansible.builtin.assert:
         that:
           - anro_ktranslate_verify_ansible_config.global.poll_time_sec == 60
-          - anro_ktranslate_verify_url_config.global.poll_time_sec == 60
+          - anro_ktranslate_verify_url_config.global.poll_time_sec == 30
+          - anro_ktranslate_verify_url_config.global.timeout_ms == 3000
           - anro_ktranslate_verify_ansible_config.devices | length == 2
           - anro_ktranslate_verify_url_config.devices | length == 2
           - anro_ktranslate_verify_url_config.devices.router01.device_ip == '172.29.0.21'
           - anro_ktranslate_verify_url_config.devices.router02.device_ip == '172.29.0.22'
+          - anro_ktranslate_verify_baseline_config.global.poll_time_sec == 60
+          - anro_ktranslate_verify_baseline_config.devices == {}
+          - anro_ktranslate_verify_baseline_config.discovery is not defined
+          - anro_ktranslate_verify_baseline_config.trap is not defined
         fail_msg: >-
           The Ansible-only and URL-merged configuration paths did not produce
           the expected ktranslate SNMP policy and device inventory.
@@ -203,9 +243,9 @@
       delay: 3
       until: anro_ktranslate_verify_prometheus.status == 200
 
-    # Capture both IDs so the test proves a device_source update affects neither
+    # Capture both IDs so the test proves a URL configuration update affects neither
     # the URL-backed container identity nor the independent Ansible-only service.
-    - name: VERIFY | Capture polling container IDs before device source reload
+    - name: VERIFY | Capture polling container IDs before URL configuration reload
       ansible.builtin.command:
         argv:
           - /usr/bin/docker
@@ -222,7 +262,7 @@
       until: anro_ktranslate_container_ids_before_reload.rc == 0
 
     # Change only remote device data. Global polling policy remains unchanged in
-    # Ansible, which verifies the ownership boundary implemented by device_source.
+    # Ansible, which verifies the ownership boundary implemented by URL configuration.
     - name: VERIFY | Publish changed remote device inventory
       ansible.builtin.copy:
         dest: /srv/ktranslate-config/devices.yaml
@@ -241,7 +281,7 @@
       delegate_to: ktranslate-config-web
       become: false
 
-    - name: VERIFY | Reapply role to exercise device source live reload
+    - name: VERIFY | Reapply role to exercise URL configuration live reload
       ansible.builtin.include_role:
         name: anro_ktranslate
 
@@ -250,7 +290,7 @@
         src: /etc/ktranslate/ktranslate-polling-url/snmp.yaml
       register: anro_ktranslate_url_config_after_reload
 
-    - name: VERIFY | Inspect polling containers after device source live reload
+    - name: VERIFY | Inspect polling containers after URL configuration live reload
       ansible.builtin.command:
         argv:
           - /usr/bin/docker
@@ -263,7 +303,7 @@
       register: anro_ktranslate_container_ids_after_reload
       changed_when: false
 
-    - name: VERIFY | Confirm device source changed only effective data without container replacement
+    - name: VERIFY | Confirm URL configuration changed only effective data without container replacement
       ansible.builtin.assert:
         that:
           - >-
@@ -275,7 +315,7 @@
             anro_ktranslate_container_ids_before_reload.results[1].stdout ==
             anro_ktranslate_container_ids_after_reload.results[1].stdout
         fail_msg: >-
-          device_source did not update the assembled SNMP configuration through
+          URL configuration did not update the assembled SNMP configuration through
           live reload while preserving both polling container identities.
 
     - name: VERIFY | Read active URL-merged configuration before failed download
@@ -283,35 +323,35 @@
         src: /etc/ktranslate/ktranslate-polling-url/snmp.yaml
       register: anro_ktranslate_url_config_before_failed_download
 
-    - name: VERIFY | Run unavailable device source rejection test
+    - name: VERIFY | Run unavailable URL configuration rejection test
       ansible.builtin.command:
         argv:
           - ansible-playbook
           - -i
           - "{{ lookup('ansible.builtin.env', 'MOLECULE_INVENTORY_FILE') }}"
-          - "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_DIRECTORY') }}/verify_missing_device_source.yml"
+          - "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_DIRECTORY') }}/verify_missing_url.yml"
           - --extra-vars
           - >-
-            {"anro_ktranslate_molecule_device_source_url":
+            {"anro_ktranslate_molecule_config_url":
             "http://172.29.0.20:8080/missing-devices.yaml"}
       delegate_to: localhost
       become: false
-      register: anro_ktranslate_missing_device_source_test
+      register: anro_ktranslate_missing_url_test
       changed_when: false
       failed_when: false
 
-    - name: VERIFY | Assert unavailable device source was rejected
+    - name: VERIFY | Assert unavailable URL configuration was rejected
       ansible.builtin.assert:
         that:
-          - anro_ktranslate_missing_device_source_test.rc != 0
+          - anro_ktranslate_missing_url_test.rc != 0
           - >-
             'HTTP Error 404' in
             (
-              anro_ktranslate_missing_device_source_test.stdout
-              ~ anro_ktranslate_missing_device_source_test.stderr
+              anro_ktranslate_missing_url_test.stdout
+              ~ anro_ktranslate_missing_url_test.stderr
             )
         fail_msg: >-
-          The child device_source play did not reject the unavailable inventory
+          The child URL configuration play did not reject the unavailable inventory
           URL with the expected HTTP 404 failure.
     - name: VERIFY | Read URL-merged configuration after failed download
       ansible.builtin.slurp:
@@ -328,7 +368,7 @@
       register: anro_ktranslate_url_container_after_failed_download
       changed_when: false
 
-    - name: VERIFY | Confirm failed device source left active state untouched
+    - name: VERIFY | Confirm failed URL configuration left active state untouched
       ansible.builtin.assert:
         that:
           - >-
@@ -338,5 +378,5 @@
             anro_ktranslate_container_ids_after_reload.results[1].stdout ==
             anro_ktranslate_url_container_after_failed_download.stdout
         fail_msg: >-
-          A failed device_source download changed active configuration or
+          A failed URL configuration download changed active configuration or
           replaced the running URL-backed polling container.

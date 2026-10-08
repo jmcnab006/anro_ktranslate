@@ -18,6 +18,7 @@
       - anro_ktranslate_default_start_limit_burst | int > 0
       - anro_ktranslate_default_command is sequence
       - anro_ktranslate_default_command is not string
+      - anro_ktranslate_baseline_config is mapping
       - anro_ktranslate_instance_defaults is mapping
       - anro_ktranslate_profiles is mapping
       - anro_ktranslate_instances is sequence

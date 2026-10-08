@@ -9,14 +9,16 @@
       {{ anro_ktranslate_config_dir }}/{{ anro_ktranslate_instance.name }}/.external-signal-checksums.yml
 
 # The per-instance directory stores role-managed configuration and the private
-# checksum state used to detect externally owned reloadable file changes.
+# checksum state used to detect externally owned reloadable file changes. It must
+# remain traversable by the non-root UID used by the ktranslate container because
+# individual configuration files are bind-mounted from beneath this directory.
 - name: INSTANCE | Create configuration directory for {{ anro_ktranslate_instance.name }}
   ansible.builtin.file:
     path: "{{ anro_ktranslate_current_config_dir }}"
     state: directory
     owner: root
     group: root
-    mode: "0750"
+    mode: "0755"
 
 # Give ktranslate a dedicated writable directory for runtime output. A direct
 # file bind prevents metadata/replace operations used by some outputs, while
@@ -34,14 +36,11 @@
     (anro_ktranslate_instance.discovery_output | default(false) | bool)
     or (anro_ktranslate_instance.runtime_output | default(false) | bool)
 
-# device_source is resolved before any active configuration is reconciled. The
-# include downloads and validates the remote inventory, then appends one synthetic
-# managed file containing Ansible-owned policy plus the downloaded devices. A
-# retrieval or validation failure therefore cannot alter the active snmp.yaml or
-# trigger service lifecycle actions.
-- name: INSTANCE | Resolve remote device source for {{ anro_ktranslate_instance.name }}
-  ansible.builtin.include_tasks: device_source.yml
-  when: anro_ktranslate_instance.device_source is defined
+# snmp.yaml is always role-owned. Resolve baseline, optional URL, and optional
+# local config before generic file reconciliation so download/parse failures are
+# fail-closed and cannot disturb the last-known-good active configuration.
+- name: INSTANCE | Resolve effective SNMP configuration for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.include_tasks: snmp_config.yml
 
 # Only declared managed files participate in file reconciliation. Runtime
 # output is application-owned beneath a dedicated subdirectory, which the non-recursive
@@ -412,8 +411,8 @@
     - "'No such container' not in anro_ktranslate_reload_container_state.stderr"
   when:
     - anro_ktranslate_instance.enabled | bool
-    - anro_ktranslate_reload_signals | length > 0
-    - not anro_ktranslate_service_restarted | bool
+    - anro_ktranslate_live_reload_signals | length > 0
+    - not anro_ktranslate_instance_restart_required | bool
 
 # Dynamic configuration is signaled only when the container is currently
 # running. A stopped or absent container will consume the new configuration
@@ -426,11 +425,11 @@
       - --signal
       - "{{ item }}"
       - "{{ anro_ktranslate_instance.name }}"
-  loop: "{{ anro_ktranslate_reload_signals }}"
+  loop: "{{ anro_ktranslate_live_reload_signals }}"
   changed_when: true
   when:
     - anro_ktranslate_instance.enabled | bool
-    - not anro_ktranslate_service_restarted | bool
+    - not anro_ktranslate_instance_restart_required | bool
     - anro_ktranslate_reload_container_state.rc == 0
     - anro_ktranslate_reload_container_state.stdout | trim == "true"
 
