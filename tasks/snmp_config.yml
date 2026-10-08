@@ -28,21 +28,40 @@
   no_log: true
   when: anro_ktranslate_instance.url is defined
 
-- name: SNMP CONFIG | Parse remote configuration for {{ anro_ktranslate_instance.name }}
-  ansible.builtin.set_fact:
-    anro_ktranslate_remote_snmp_config: >-
-      {{ anro_ktranslate_remote_snmp_slurp.content | b64decode | from_yaml }}
-  no_log: true
+# JSON is valid YAML. Parse the staged source before touching the active file.
+# A malformed document must fail with a controlled message and without leaking
+# SNMP communities or other credentials into the Ansible output.
+- name: SNMP CONFIG | Validate downloaded configuration for {{ anro_ktranslate_instance.name }}
   when: anro_ktranslate_instance.url is defined
+  block:
+    - name: SNMP CONFIG | Parse downloaded YAML or JSON for {{ anro_ktranslate_instance.name }}
+      ansible.builtin.set_fact:
+        anro_ktranslate_remote_snmp_config: >-
+          {{ anro_ktranslate_remote_snmp_slurp.content | b64decode | from_yaml }}
+      no_log: true
 
-- name: SNMP CONFIG | Validate remote configuration for {{ anro_ktranslate_instance.name }}
-  ansible.builtin.assert:
-    that:
-      - anro_ktranslate_remote_snmp_config is mapping
-    fail_msg: >-
-      Remote configuration for {{ anro_ktranslate_instance.name }} must be a YAML
-      mapping. The active snmp.yaml was not changed.
-  when: anro_ktranslate_instance.url is defined
+    - name: SNMP CONFIG | Assert downloaded configuration structure for {{ anro_ktranslate_instance.name }}
+      ansible.builtin.assert:
+        that:
+          - anro_ktranslate_remote_snmp_config is mapping
+          - anro_ktranslate_remote_snmp_config.devices | default({}) is mapping
+          - anro_ktranslate_remote_snmp_config.global | default({}) is mapping
+          - >-
+            anro_ktranslate_remote_snmp_config.discovery is not defined
+            or anro_ktranslate_remote_snmp_config.discovery is none
+            or anro_ktranslate_remote_snmp_config.discovery is mapping
+          - >-
+            anro_ktranslate_remote_snmp_config.trap is not defined
+            or anro_ktranslate_remote_snmp_config.trap is none
+            or anro_ktranslate_remote_snmp_config.trap is mapping
+        fail_msg: Downloaded SNMP configuration has an invalid structure.
+      no_log: true
+  rescue:
+    - name: SNMP CONFIG | Reject invalid downloaded configuration for {{ anro_ktranslate_instance.name }}
+      ansible.builtin.fail:
+        msg: >-
+          Downloaded SNMP configuration for {{ anro_ktranslate_instance.name }}
+          is invalid YAML/JSON or has an invalid structure.
 
 # Recursive mapping merge preserves unspecified baseline/remote keys. Lists are
 # replaced rather than appended because ktranslate list values are complete policy.
@@ -64,6 +83,41 @@
             list_merge='replace'
           )
       }}
+
+# Validate both the merged mapping and its YAML representation before the
+# existing managed-file lifecycle can replace the active configuration.
+- name: SNMP CONFIG | Validate merged configuration for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.assert:
+    that:
+      - anro_ktranslate_effective_snmp_config is mapping
+      - anro_ktranslate_effective_snmp_config.devices | default({}) is mapping
+      - anro_ktranslate_effective_snmp_config.global | default({}) is mapping
+      - >-
+        anro_ktranslate_effective_snmp_config.discovery is not defined
+        or anro_ktranslate_effective_snmp_config.discovery is none
+        or anro_ktranslate_effective_snmp_config.discovery is mapping
+      - >-
+        anro_ktranslate_effective_snmp_config.trap is not defined
+        or anro_ktranslate_effective_snmp_config.trap is none
+        or anro_ktranslate_effective_snmp_config.trap is mapping
+    fail_msg: >-
+      Merged SNMP configuration for {{ anro_ktranslate_instance.name }}
+      has an invalid structure.
+  no_log: true
+
+- name: SNMP CONFIG | Validate YAML serialization for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          anro_ktranslate_effective_snmp_config
+          | to_nice_yaml(indent=2, sort_keys=false)
+          | from_yaml
+        ) == anro_ktranslate_effective_snmp_config
+    fail_msg: >-
+      Merged SNMP configuration for {{ anro_ktranslate_instance.name }}
+      failed YAML serialization validation.
+  no_log: true
 
 # Reuse the existing managed-file lifecycle so snmp.yaml gets the same mount,
 # restart, live-signal, and stopped-container behavior as other managed files.
