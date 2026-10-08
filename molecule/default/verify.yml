@@ -323,6 +323,23 @@
         src: /etc/ktranslate/ktranslate-polling-url/snmp.yaml
       register: anro_ktranslate_url_config_before_failed_download
 
+    - name: VERIFY | Confirm unavailable SNMP configuration URL returns HTTP 404
+      ansible.builtin.uri:
+        url: "http://172.29.0.20:8080/nonexistent-devices.yaml"
+        method: GET
+        status_code: 404
+        return_content: false
+        timeout: 10
+      register: anro_ktranslate_missing_url_http
+      changed_when: false
+
+    - name: VERIFY | Assert unavailable SNMP configuration returned HTTP 404
+      ansible.builtin.assert:
+        that:
+          - anro_ktranslate_missing_url_http.status == 404
+        fail_msg: >-
+          The unavailable SNMP configuration URL did not return HTTP 404.
+
     - name: VERIFY | Run unavailable URL configuration rejection test
       ansible.builtin.command:
         argv:
@@ -340,19 +357,30 @@
       changed_when: false
       failed_when: false
 
+    - name: VERIFY | Display unavailable URL test diagnostics
+      ansible.builtin.debug:
+        msg:
+          - "Return code: {{ anro_ktranslate_missing_url_test.rc }}"
+          - "STDOUT: {{ anro_ktranslate_missing_url_test.stdout }}"
+          - "STDERR: {{ anro_ktranslate_missing_url_test.stderr }}"
+      when: anro_ktranslate_missing_url_test.rc != 0
+
     - name: VERIFY | Assert unavailable URL configuration was rejected
       ansible.builtin.assert:
         that:
           - anro_ktranslate_missing_url_test.rc != 0
           - >-
-            'HTTP Error 404' in
-            (
+            'SNMP CONFIG | Download remote configuration for ktranslate-polling-url'
+            in (
               anro_ktranslate_missing_url_test.stdout
               ~ anro_ktranslate_missing_url_test.stderr
             )
+          - >-
+            'Request failed' in anro_ktranslate_missing_url_test.stderr
         fail_msg: >-
-          The child URL configuration play did not reject the unavailable inventory
-          URL with the expected HTTP 404 failure.
+          The child playbook did not fail while downloading the
+          unavailable SNMP configuration URL.
+
     - name: VERIFY | Read URL-merged configuration after failed download
       ansible.builtin.slurp:
         src: /etc/ktranslate/ktranslate-polling-url/snmp.yaml

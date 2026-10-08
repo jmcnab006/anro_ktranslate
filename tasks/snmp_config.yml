@@ -67,6 +67,9 @@
 
 # Reuse the existing managed-file lifecycle so snmp.yaml gets the same mount,
 # restart, live-signal, and stopped-container behavior as other managed files.
+# ktranslate runs as a non-root UID. The active bind-mounted
+# configuration must therefore be world-readable; the staged
+# remote source remains root-only at 0600.
 - name: SNMP CONFIG | Register effective configuration for {{ anro_ktranslate_instance.name }}
   ansible.builtin.set_fact:
     anro_ktranslate_instance: >-
@@ -80,9 +83,6 @@
                   'source': 'managed',
                   'destination': '/etc/ktranslate/snmp.yaml',
                   'format': 'yaml',
-                  # ktranslate runs as a non-root UID. The active bind-mounted
-                  # configuration must therefore be world-readable; the staged
-                  # remote source remains root-only at 0600.
                   'mode': '0644',
                   'read_only': true,
                   'no_log': true,
