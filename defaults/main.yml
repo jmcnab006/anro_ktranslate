@@ -102,3 +102,5 @@ anro_ktranslate_default_volumes:
 # optional; when non-empty it selects the same-named profile definition.
 anro_ktranslate_instances: []
 anro_ktranslate_snmp_config: {}
+
+anro_ktranslate_validate_certs: true
