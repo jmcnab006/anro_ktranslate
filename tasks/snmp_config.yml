@@ -119,6 +119,68 @@
       failed YAML serialization validation.
   no_log: true
 
+# The downloaded YAML device block must retain its original scalar representation:
+# a YAML round-trip changes discovery timestamps and has been observed to make
+# ktranslate reject the device mapping. Preserve it when devices are not overridden.
+# JSON input remains supported through the standard YAML serialization path.
+- name: SNMP CONFIG | Extract original YAML devices block for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_source_devices_block: >-
+      {{
+        (
+          anro_ktranslate_remote_snmp_slurp.content
+          | b64decode
+          | regex_findall('(?m)^devices:[^\n]*(?:\n(?:[ \t]+[^\n]*|[ \t]*))*')
+          | first
+          | default('', true)
+        )
+      }}
+  no_log: true
+  when: anro_ktranslate_instance.url is defined
+
+- name: SNMP CONFIG | Select lossless device rendering for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_preserve_source_devices: >-
+      {{
+        anro_ktranslate_instance.url is defined
+        and (anro_ktranslate_source_devices_block | default('') | length > 0)
+        and (anro_ktranslate_instance.config | default({})).devices is not defined
+        and anro_ktranslate_baseline_config.devices is not defined
+      }}
+
+- name: SNMP CONFIG | Render final configuration for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_rendered_snmp_config: >-
+      {{
+        (
+          anro_ktranslate_effective_snmp_config
+          | dict2items
+          | rejectattr('key', 'equalto', 'devices')
+          | list
+          | items2dict
+          | to_nice_yaml(indent=2, sort_keys=false)
+        )
+        ~ '\n'
+        ~ anro_ktranslate_source_devices_block
+        ~ '\n'
+        if anro_ktranslate_preserve_source_devices | bool
+        else anro_ktranslate_effective_snmp_config
+             | to_nice_yaml(indent=2, sort_keys=false)
+      }}
+  no_log: true
+
+- name: SNMP CONFIG | Validate rendered YAML for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.assert:
+    that:
+      - anro_ktranslate_rendered_snmp_config | from_yaml is mapping
+      - >-
+        (
+          anro_ktranslate_rendered_snmp_config | from_yaml
+        ).devices | default({}) | length ==
+        anro_ktranslate_effective_snmp_config.devices | default({}) | length
+    fail_msg: Final rendered SNMP configuration is invalid or lost devices.
+  no_log: true
+
 # Reuse the existing managed-file lifecycle so snmp.yaml gets the same mount,
 # restart, live-signal, and stopped-container behavior as other managed files.
 # ktranslate runs as a non-root UID. The active bind-mounted
@@ -136,13 +198,13 @@
                   'name': 'snmp.yaml',
                   'source': 'managed',
                   'destination': '/etc/ktranslate/snmp.yaml',
-                  'format': 'yaml',
+                  'format': 'raw',
                   'mode': '0644',
                   'read_only': true,
                   'no_log': true,
                   'reload': anro_ktranslate_instance.reload | default('signal'),
                   'reload_signal': anro_ktranslate_instance.reload_signal | default('USR2'),
-                  'content': anro_ktranslate_effective_snmp_config
+                  'content': anro_ktranslate_rendered_snmp_config
                 }
               ]
             },
