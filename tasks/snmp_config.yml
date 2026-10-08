@@ -1,0 +1,97 @@
+---
+# snmp.yaml is a required role-owned artifact for every ktranslate instance.
+# Start with the inert baseline, optionally overlay a remote YAML document, then
+# overlay instance config. This makes precedence deterministic without a mode flag.
+- name: SNMP CONFIG | Initialize effective configuration for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_effective_snmp_config: "{{ anro_ktranslate_baseline_config }}"
+
+# The URL is staged in a hidden file so a failed download or parse cannot replace
+# the active snmp.yaml. force=true makes the remote source authoritative on every
+# converge; the later managed-file copy still controls idempotent reload behavior.
+- name: SNMP CONFIG | Download remote configuration for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.get_url:
+    url: "{{ anro_ktranslate_instance.url }}"
+    dest: "{{ anro_ktranslate_current_config_dir }}/.snmp-source.yaml"
+    owner: root
+    group: root
+    mode: "0600"
+    force: true
+    validate_certs: true
+  no_log: true
+  when: anro_ktranslate_instance.url is defined
+
+- name: SNMP CONFIG | Read remote configuration for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.slurp:
+    src: "{{ anro_ktranslate_current_config_dir }}/.snmp-source.yaml"
+  register: anro_ktranslate_remote_snmp_slurp
+  no_log: true
+  when: anro_ktranslate_instance.url is defined
+
+- name: SNMP CONFIG | Parse remote configuration for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_remote_snmp_config: >-
+      {{ anro_ktranslate_remote_snmp_slurp.content | b64decode | from_yaml }}
+  no_log: true
+  when: anro_ktranslate_instance.url is defined
+
+- name: SNMP CONFIG | Validate remote configuration for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.assert:
+    that:
+      - anro_ktranslate_remote_snmp_config is mapping
+    fail_msg: >-
+      Remote configuration for {{ anro_ktranslate_instance.name }} must be a YAML
+      mapping. The active snmp.yaml was not changed.
+  when: anro_ktranslate_instance.url is defined
+
+# Recursive mapping merge preserves unspecified baseline/remote keys. Lists are
+# replaced rather than appended because ktranslate list values are complete policy.
+- name: SNMP CONFIG | Merge configuration layers for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_effective_snmp_config: >-
+      {{
+        anro_ktranslate_baseline_config
+        | combine(
+            anro_ktranslate_remote_snmp_config
+            if anro_ktranslate_instance.url is defined
+            else {},
+            recursive=true,
+            list_merge='replace'
+          )
+        | combine(
+            anro_ktranslate_instance.config | default({}, true),
+            recursive=true,
+            list_merge='replace'
+          )
+      }}
+
+# Reuse the existing managed-file lifecycle so snmp.yaml gets the same mount,
+# restart, live-signal, and stopped-container behavior as other managed files.
+- name: SNMP CONFIG | Register effective configuration for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_instance: >-
+      {{
+        anro_ktranslate_instance
+        | combine(
+            {
+              'files': (anro_ktranslate_instance.files | default([], true)) + [
+                {
+                  'name': 'snmp.yaml',
+                  'source': 'managed',
+                  'destination': '/etc/ktranslate/snmp.yaml',
+                  'format': 'yaml',
+                  # ktranslate runs as a non-root UID. The active bind-mounted
+                  # configuration must therefore be world-readable; the staged
+                  # remote source remains root-only at 0600.
+                  'mode': '0644',
+                  'read_only': true,
+                  'no_log': true,
+                  'reload': anro_ktranslate_instance.reload | default('signal'),
+                  'reload_signal': anro_ktranslate_instance.reload_signal | default('USR2'),
+                  'content': anro_ktranslate_effective_snmp_config
+                }
+              ]
+            },
+            recursive=false
+          )
+      }}
