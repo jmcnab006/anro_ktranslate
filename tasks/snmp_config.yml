@@ -17,7 +17,7 @@
     group: root
     mode: "0600"
     force: true
-    validate_certs: "{{ anro_ktranslate_validate_certs | | default(true) | bool }}"
+    validate_certs: "{{ anro_ktranslate_validate_certs | default(true) | bool }}"
   no_log: true
   when: anro_ktranslate_instance.url is defined
 
