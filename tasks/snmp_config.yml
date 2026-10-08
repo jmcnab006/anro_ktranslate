@@ -123,6 +123,8 @@
 # a YAML round-trip changes discovery timestamps and has been observed to make
 # ktranslate reject the device mapping. Preserve it when devices are not overridden.
 # JSON input remains supported through the standard YAML serialization path.
+# Preserve the original device block, including timestamp precision and
+# scalar formatting, when device definitions are not explicitly overridden.
 - name: SNMP CONFIG | Extract original YAML devices block for {{ anro_ktranslate_instance.name }}
   ansible.builtin.set_fact:
     anro_ktranslate_source_devices_block: >-
@@ -130,10 +132,9 @@
         (
           anro_ktranslate_remote_snmp_slurp.content
           | b64decode
-          | regex_findall('(?m)^devices:[^\n]*(?:\n(?:[ \t]+[^\n]*|[ \t]*))*')
-          | first
+          | regex_search('(?m)^devices:[^\r\n]*(?:\r?\n[ \t]+[^\r\n]*)*')
           | default('', true)
-        )
+        ) | trim
       }}
   no_log: true
   when: anro_ktranslate_instance.url is defined
@@ -159,15 +160,17 @@
     anro_ktranslate_rendered_snmp_config: >-
       {{
         (
-          anro_ktranslate_effective_snmp_config
-          | dict2items
-          | rejectattr('key', 'equalto', 'devices')
-          | list
-          | items2dict
-          | to_nice_yaml(indent=2, sort_keys=false)
+          (
+            anro_ktranslate_effective_snmp_config
+            | dict2items
+            | rejectattr('key', 'equalto', 'devices')
+            | list
+            | items2dict
+            | to_nice_yaml(indent=2, sort_keys=false)
+          ) | trim
         )
         ~ '\n'
-        ~ anro_ktranslate_source_devices_block
+        ~ (anro_ktranslate_source_devices_block | trim)
         ~ '\n'
         if anro_ktranslate_preserve_source_devices | bool
         else anro_ktranslate_effective_snmp_config
