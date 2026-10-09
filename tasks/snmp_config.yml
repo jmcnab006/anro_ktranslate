@@ -38,7 +38,7 @@
       ansible.builtin.set_fact:
         anro_ktranslate_remote_snmp_config: >-
           {{ anro_ktranslate_remote_snmp_slurp.content | b64decode | from_yaml }}
-      no_log: true
+      no_log: false
 
     - name: SNMP CONFIG | Assert downloaded configuration structure for {{ anro_ktranslate_instance.name }}
       ansible.builtin.assert:

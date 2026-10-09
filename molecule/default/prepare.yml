@@ -157,11 +157,12 @@
     # baseline and then applies any instance-local config overrides.
     - name: PREPARE | Render HTTP device inventory fixture
       ansible.builtin.copy:
+        src: files/web/devices.txt
         dest: /srv/ktranslate-config/devices.yaml
         owner: root
         group: root
         mode: "0644"
-        content: "{{ anro_ktranslate_molecule_devices | to_nice_yaml(indent=2, sort_keys=false) }}"
+#        content: "{{ anro_ktranslate_molecule_devices | to_nice_yaml(indent=2, sort_keys=false) }}"
 
     - name: PREPARE | Check HTTP fixture server
       ansible.builtin.command:

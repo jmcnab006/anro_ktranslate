@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 
-DEVICES_FILE = Path("/mock/devices.json")
+DEVICES_FILE = Path("/mock/devices.txt")
 
 
 class NetBoxMockHandler(BaseHTTPRequestHandler):

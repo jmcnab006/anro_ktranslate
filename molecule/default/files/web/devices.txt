@@ -1,0 +1,314 @@
+devices:
+    router01:
+        device_name: router01
+        device_ip: 172.29.0.21
+        snmp_comm: public
+        snmp_ver: "2c"
+        poll_time_sec: 60
+        timeout_ms: 3000
+        retries: 1
+    router02:
+        device_name: router02
+        device_ip: 172.29.0.22
+        snmp_comm: public
+        snmp_ver: "2c"
+        poll_time_sec: 60
+        timeout_ms: 3000
+        retries: 1
+    d001P002A__172.21.255.248:
+        device_name: d001P002A
+        device_ip: 172.21.255.248
+        snmp_comm: public
+        use_snmp_v1: false
+        debug: false
+        port: 161
+        oid: .1.3.6.1.4.1.476.1.42
+        description: GXT5-1500LVRT2UXL
+        last_checked: 2026-10-07T20:20:39.441933708Z
+        mib_profile: liebert-ac.yml
+        provider: kentik-air-conditioner
+        user_tags: {}
+        expected_device_tags: 0
+        discovered_mibs:
+            - LIEBERT-GP-ENVIRONMENTAL-MIB
+        engine_id: 80:00:01:dc:03:00:09:f5:35:80:15
+        match_attributes: {}
+        monitor_admin_shut: false
+        no_use_bulkwalkall: false
+        purge_after_num: 0
+    d001S001A__172.21.255.11:
+        device_name: d001S001A
+        device_ip: 172.21.255.11
+        snmp_comm: public
+        use_snmp_v1: false
+        debug: false
+        port: 161
+        oid: .1.3.6.1.4.1.890.1.15
+        description: XGS4600-52F
+        last_checked: 2026-10-07T20:20:40.481780005Z
+        mib_profile: zyxel-switch.yml
+        provider: kentik-switch
+        user_tags: {}
+        expected_device_tags: 0
+        discovered_mibs:
+            - IF-MIB
+            - ZYXEL-ES-COMMON
+        engine_id: 80:00:03:7a:03:bc:99:11:8f:5e:9d
+        match_attributes: {}
+        monitor_admin_shut: false
+        no_use_bulkwalkall: false
+        purge_after_num: 0
+    d001S002A__172.21.255.37:
+        device_name: d001S002A
+        device_ip: 172.21.255.37
+        snmp_comm: public
+        use_snmp_v1: false
+        debug: false
+        port: 161
+        oid: .1.3.6.1.4.1.890.1.15
+        description: XS3800-28
+        last_checked: 2026-10-07T20:20:40.79321644Z
+        mib_profile: zyxel-switch.yml
+        provider: kentik-switch
+        user_tags: {}
+        expected_device_tags: 0
+        discovered_mibs:
+            - IF-MIB
+            - ZYXEL-ES-COMMON
+        engine_id: 80:00:03:7a:03:bc:cf:4f:bc:f1:e6
+        match_attributes: {}
+        monitor_admin_shut: false
+        no_use_bulkwalkall: false
+        purge_after_num: 0
+    d001S003A__172.21.255.13:
+        device_name: d001S003A
+        device_ip: 172.21.255.13
+        snmp_comm: public
+        use_snmp_v1: false
+        debug: false
+        port: 161
+        oid: .1.3.6.1.4.1.890.1.15
+        description: XS3700-24
+        last_checked: 2026-10-07T20:20:40.554662856Z
+        mib_profile: zyxel-switch.yml
+        provider: kentik-switch
+        user_tags: {}
+        expected_device_tags: 0
+        discovered_mibs:
+            - IF-MIB
+            - ZYXEL-ES-COMMON
+        engine_id: 80:00:03:7a:03:04:bf:6d:16:91:9b
+        match_attributes: {}
+        monitor_admin_shut: false
+        no_use_bulkwalkall: false
+        purge_after_num: 0
+    d001S004A__172.21.255.14:
+        device_name: d001S004A
+        device_ip: 172.21.255.14
+        snmp_comm: public
+        use_snmp_v1: false
+        debug: false
+        port: 161
+        oid: .1.3.6.1.4.1.8886.6.134
+        description: REAP_1.2.3617_20180208.ISCOM2948GF-4C-DC/D.Compiled Feb 08 2018,support@Raisecom.com
+        last_checked: 2026-10-07T20:20:38.622785669Z
+        mib_profile: base.yml
+        provider: kentik-default
+        user_tags: {}
+        expected_device_tags: 0
+        discovered_mibs:
+            - IF-MIB
+            - IP-MIB
+            - OSPF-MIB
+            - TCP-MIB
+            - UDP-MIB
+        engine_id: 80:00:22:b6:03:00:0e:5e:5d:ac:c6
+        match_attributes: {}
+        monitor_admin_shut: false
+        no_use_bulkwalkall: false
+        purge_after_num: 0
+    d001S006A__172.21.255.16:
+        device_name: d001S006A
+        device_ip: 172.21.255.16
+        snmp_comm: public
+        use_snmp_v1: false
+        debug: false
+        port: 161
+        oid: .1.3.6.1.4.1.890.1.15
+        description: XS3700-24
+        last_checked: 2026-10-07T20:20:38.923846995Z
+        mib_profile: zyxel-switch.yml
+        provider: kentik-switch
+        user_tags: {}
+        expected_device_tags: 0
+        discovered_mibs:
+            - IF-MIB
+            - ZYXEL-ES-COMMON
+        engine_id: 80:00:03:7a:03:04:bf:6d:16:8f:93
+        match_attributes: {}
+        monitor_admin_shut: false
+        no_use_bulkwalkall: false
+        purge_after_num: 0
+    d001S007A__172.21.255.17:
+        device_name: d001S007A
+        device_ip: 172.21.255.17
+        snmp_comm: public
+        use_snmp_v1: false
+        debug: false
+        port: 161
+        oid: .1.3.6.1.4.1.890.1.15
+        description: XGS4600-52F
+        last_checked: 2026-10-07T20:20:38.318611843Z
+        mib_profile: zyxel-switch.yml
+        provider: kentik-switch
+        user_tags: {}
+        expected_device_tags: 0
+        discovered_mibs:
+            - IF-MIB
+            - ZYXEL-ES-COMMON
+        engine_id: 80:00:03:7a:03:5c:e2:8c:5c:51:70
+        match_attributes: {}
+        monitor_admin_shut: false
+        no_use_bulkwalkall: false
+        purge_after_num: 0
+    d001S008A__172.21.255.18:
+        device_name: d001S008A
+        device_ip: 172.21.255.18
+        snmp_comm: public
+        use_snmp_v1: false
+        debug: false
+        port: 161
+        oid: .1.3.6.1.4.1.890.1.15
+        description: XGS4600-52F
+        last_checked: 2026-10-07T20:20:40.253043217Z
+        mib_profile: zyxel-switch.yml
+        provider: kentik-switch
+        user_tags: {}
+        expected_device_tags: 0
+        discovered_mibs:
+            - IF-MIB
+            - ZYXEL-ES-COMMON
+        engine_id: 80:00:03:7a:03:bc:99:11:8f:5d:23
+        match_attributes: {}
+        monitor_admin_shut: false
+        no_use_bulkwalkall: false
+        purge_after_num: 0
+    d001S009G__172.21.255.19:
+        device_name: d001S009G
+        device_ip: 172.21.255.19
+        snmp_comm: public
+        use_snmp_v1: false
+        debug: false
+        port: 161
+        oid: .1.3.6.1.4.1.890.1.15
+        description: XS3700-24
+        last_checked: 2026-10-07T20:20:38.321816218Z
+        mib_profile: zyxel-switch.yml
+        provider: kentik-switch
+        user_tags: {}
+        expected_device_tags: 0
+        discovered_mibs:
+            - IF-MIB
+            - ZYXEL-ES-COMMON
+        engine_id: 80:00:03:7a:03:a0:e4:cb:85:70:d2
+        match_attributes: {}
+        monitor_admin_shut: false
+        no_use_bulkwalkall: false
+        purge_after_num: 0
+    d001S010A__172.21.255.20:
+        device_name: d001S010A
+        device_ip: 172.21.255.20
+        snmp_comm: public
+        use_snmp_v1: false
+        debug: false
+        port: 161
+        oid: .1.3.6.1.4.1.890.1.15
+        description: XS3800-28
+        last_checked: 2026-10-07T20:20:38.330387262Z
+        mib_profile: zyxel-switch.yml
+        provider: kentik-switch
+        user_tags: {}
+        expected_device_tags: 0
+        discovered_mibs:
+            - IF-MIB
+            - ZYXEL-ES-COMMON
+        engine_id: 80:00:03:7a:03:bc:99:11:d8:33:7f
+        match_attributes: {}
+        monitor_admin_shut: false
+        no_use_bulkwalkall: false
+        purge_after_num: 0
+    d001S011D__172.21.255.21:
+        device_name: d001S011D
+        device_ip: 172.21.255.21
+        snmp_comm: public
+        use_snmp_v1: false
+        debug: false
+        port: 161
+        oid: .1.3.6.1.4.1.890.1.5.8.55
+        description: GS2200-24
+        last_checked: 2026-10-07T20:20:38.344625814Z
+        mib_profile: base.yml
+        provider: kentik-default
+        user_tags: {}
+        expected_device_tags: 0
+        discovered_mibs:
+            - IF-MIB
+            - IP-MIB
+            - OSPF-MIB
+            - TCP-MIB
+            - UDP-MIB
+        engine_id: 80:00:03:7a:03:40:4a:03:61:6a:f7
+        match_attributes: {}
+        monitor_admin_shut: false
+        no_use_bulkwalkall: false
+        purge_after_num: 0
+    d001S012E__172.21.255.22:
+        device_name: d001S012E
+        device_ip: 172.21.255.22
+        snmp_comm: public
+        use_snmp_v1: false
+        debug: false
+        port: 161
+        oid: .1.3.6.1.4.1.890.1.5.8.55
+        description: GS2200-24
+        last_checked: 2026-10-07T20:20:38.789227865Z
+        mib_profile: base.yml
+        provider: kentik-default
+        user_tags: {}
+        expected_device_tags: 0
+        discovered_mibs:
+            - IF-MIB
+            - IP-MIB
+            - OSPF-MIB
+            - TCP-MIB
+            - UDP-MIB
+        engine_id: 80:00:03:7a:03:40:4a:03:61:6b:31
+        match_attributes: {}
+        monitor_admin_shut: false
+        no_use_bulkwalkall: false
+        purge_after_num: 0
+    d001S013E__172.21.255.23:
+        device_name: d001S013E
+        device_ip: 172.21.255.23
+        snmp_comm: public
+        use_snmp_v1: false
+        debug: false
+        port: 161
+        oid: .1.3.6.1.4.1.890.1.5.8.55
+        description: GS2200-24
+        last_checked: 2026-10-07T20:20:38.352591182Z
+        mib_profile: base.yml
+        provider: kentik-default
+        user_tags: {}
+        expected_device_tags: 0
+        discovered_mibs:
+            - IF-MIB
+            - IP-MIB
+            - OSPF-MIB
+            - TCP-MIB
+            - UDP-MIB
+        engine_id: 80:00:03:7a:03:40:4a:03:61:6b:14
+        match_attributes: {}
+        monitor_admin_shut: false
+        no_use_bulkwalkall: false
+        purge_after_num: 0

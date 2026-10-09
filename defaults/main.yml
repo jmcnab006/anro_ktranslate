@@ -2,6 +2,7 @@
 # Default ktranslate image. Pin this to an explicit version or digest in production.
 anro_ktranslate_image: "kentik/ktranslate:latest"
 
+anro_ktranslate_debug: false
 # Docker is intentionally installed outside this role. Override only when the
 # Docker CLI is installed at a non-standard absolute path.
 anro_ktranslate_docker_binary: "/usr/bin/docker"

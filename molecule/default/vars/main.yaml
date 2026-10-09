@@ -25,6 +25,7 @@ anro_ktranslate_molecule_snmp_base_config:
     threads: 4
 
 # This remote YAML is merged over the role baseline by the URL-backed instance.
+anro_ktranslate_debug: false
 anro_ktranslate_molecule_devices:
   devices:
     router01:
