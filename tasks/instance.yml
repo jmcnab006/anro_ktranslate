@@ -20,6 +20,17 @@
     group: root
     mode: "0755"
 
+- name: INSTANCE | Require runtime identity for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.assert:
+    that:
+      - anro_ktranslate_runtime_uid is not none
+      - anro_ktranslate_runtime_gid is not none
+      - anro_ktranslate_runtime_uid | string is match('^[0-9]+$')
+      - anro_ktranslate_runtime_gid | string is match('^[0-9]+$')
+  when: >-
+    (anro_ktranslate_instance.discovery_output | default(false) | bool)
+    or (anro_ktranslate_instance.runtime_output | default(false) | bool)
+
 # Give ktranslate a dedicated writable directory for runtime output. A direct
 # file bind prevents metadata/replace operations used by some outputs, while
 # mounting all of /etc/ktranslate would overlap the role's read-only configuration
@@ -29,9 +40,9 @@
   ansible.builtin.file:
     path: "{{ anro_ktranslate_current_config_dir }}/runtime"
     state: directory
-    owner: root
-    group: root
-    mode: "0777"
+    owner: "{{ anro_ktranslate_runtime_uid }}"
+    group: "{{ anro_ktranslate_runtime_gid }}"
+    mode: "0750"
   when: >-
     (anro_ktranslate_instance.discovery_output | default(false) | bool)
     or (anro_ktranslate_instance.runtime_output | default(false) | bool)
@@ -99,6 +110,22 @@
 # Render only files owned by Ansible. reload=restart preserves the traditional
 # behavior; reload=signal allows device inventory changes to be consumed by a
 # running ktranslate process without replacing its container.
+- name: INSTANCE | Inspect previous active SNMP configuration
+  ansible.builtin.stat:
+    path: "{{ anro_ktranslate_current_config_dir }}/snmp.yaml"
+  register: anro_ktranslate_previous_snmp_stat
+
+- name: INSTANCE | Back up previous active SNMP configuration
+  ansible.builtin.copy:
+    src: "{{ anro_ktranslate_current_config_dir }}/snmp.yaml"
+    dest: "{{ anro_ktranslate_current_config_dir }}/.snmp-rollback.yaml"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0600"
+  when: anro_ktranslate_previous_snmp_stat.stat.exists
+  no_log: true
+
 - name: INSTANCE | Render managed files for {{ anro_ktranslate_instance.name }}
   ansible.builtin.copy:
     dest: "{{ anro_ktranslate_current_config_dir }}/{{ item.name }}"
@@ -333,17 +360,56 @@
 # A converged run leaves the container untouched. Configuration that cannot be
 # reloaded safely causes a restart, while disabled instances are stopped and
 # disabled without special workload-specific code.
-- name: INSTANCE | Manage service state for {{ anro_ktranslate_instance.name }}
-  ansible.builtin.systemd_service:
-    name: "{{ anro_ktranslate_instance.name }}.service"
-    enabled: "{{ anro_ktranslate_instance.enabled | bool }}"
-    daemon_reload: "{{ anro_ktranslate_unit_template.changed }}"
-    state: >-
-      {{
-        'restarted'
-        if (anro_ktranslate_instance.enabled | bool and anro_ktranslate_instance_restart_required)
-        else ('started' if anro_ktranslate_instance.enabled | bool else 'stopped')
-      }}
+- name: INSTANCE | Activate configuration with rollback on failure
+  block:
+    - name: INSTANCE | Manage service state for {{ anro_ktranslate_instance.name }}
+      ansible.builtin.systemd_service:
+        name: "{{ anro_ktranslate_instance.name }}.service"
+        enabled: "{{ anro_ktranslate_instance.enabled | bool }}"
+        daemon_reload: "{{ anro_ktranslate_unit_template.changed }}"
+        state: >-
+          {{
+            'restarted'
+            if (anro_ktranslate_instance.enabled | bool and anro_ktranslate_instance_restart_required)
+            else ('started' if anro_ktranslate_instance.enabled | bool else 'stopped')
+          }}
+
+    # systemd active alone is insufficient: Docker must report a running process.
+    - name: INSTANCE | Verify container is running after activation
+      ansible.builtin.command:
+        argv:
+          - "{{ anro_ktranslate_docker_binary }}"
+          - inspect
+          - --format
+          - "{{ '{{.State.Running}}' }}"
+          - "{{ anro_ktranslate_instance.name }}"
+      register: anro_ktranslate_activation_state
+      changed_when: false
+      until: anro_ktranslate_activation_state.rc == 0 and anro_ktranslate_activation_state.stdout | trim == 'true'
+      retries: "{{ anro_ktranslate_activation_retries }}"
+      delay: "{{ anro_ktranslate_activation_delay }}"
+      when: anro_ktranslate_instance.enabled | bool
+  rescue:
+    - name: INSTANCE | Restore previous SNMP configuration after activation failure
+      ansible.builtin.copy:
+        src: "{{ anro_ktranslate_current_config_dir }}/.snmp-rollback.yaml"
+        dest: "{{ anro_ktranslate_current_config_dir }}/snmp.yaml"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      when: anro_ktranslate_previous_snmp_stat.stat.exists
+      no_log: true
+
+    - name: INSTANCE | Restart service with restored configuration
+      ansible.builtin.systemd_service:
+        name: "{{ anro_ktranslate_instance.name }}.service"
+        state: restarted
+      when: anro_ktranslate_previous_snmp_stat.stat.exists and anro_ktranslate_instance.enabled | bool
+
+    - name: INSTANCE | Fail deployment after rollback
+      ansible.builtin.fail:
+        msg: "Activation failed for {{ anro_ktranslate_instance.name }}; previous SNMP configuration restored when available."
 
 # Collect signals required by changed managed files. ktranslate's supported SNMP
 # device reload uses USR2, while reload_signal remains configurable for future

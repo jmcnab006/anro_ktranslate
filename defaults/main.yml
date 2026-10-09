@@ -3,6 +3,17 @@
 anro_ktranslate_image: "kentik/ktranslate:latest"
 
 anro_ktranslate_debug: false
+# Set to the effective UID/GID of the image process before enabling writable output.
+# No guessed default: a mismatched identity would make output fail at runtime.
+anro_ktranslate_runtime_uid: null
+anro_ktranslate_runtime_gid: null
+
+# Optional host-side application validator. argv receives the staged YAML path
+# appended as its final argument. Leave empty if no compatible validator exists.
+anro_ktranslate_snmp_validator_argv: []
+# Wait for Docker to report a running container after activation.
+anro_ktranslate_activation_retries: 10
+anro_ktranslate_activation_delay: 2
 # Docker is intentionally installed outside this role. Override only when the
 # Docker CLI is installed at a non-standard absolute path.
 anro_ktranslate_docker_binary: "/usr/bin/docker"

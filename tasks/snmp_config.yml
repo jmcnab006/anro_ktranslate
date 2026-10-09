@@ -288,6 +288,25 @@
       for {{ anro_ktranslate_instance.name }}.
   no_log: "{{ not anro_ktranslate_debug | default(true) | bool }}"
 
+# Validate the exact rendered bytes before promoting them. The external command
+# must accept a file path as its final argument and exit nonzero on rejection.
+- name: SNMP CONFIG | Stage rendered candidate for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.copy:
+    dest: "{{ anro_ktranslate_current_config_dir }}/.snmp-candidate.yaml"
+    content: "{{ anro_ktranslate_rendered_snmp_config }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when: anro_ktranslate_snmp_validator_argv | length > 0
+
+- name: SNMP CONFIG | Validate candidate with application validator for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.command:
+    argv: "{{ anro_ktranslate_snmp_validator_argv + [anro_ktranslate_current_config_dir ~ '/.snmp-candidate.yaml'] }}"
+  changed_when: false
+  no_log: true
+  when: anro_ktranslate_snmp_validator_argv | length > 0
+
 # Reuse the existing managed-file lifecycle so snmp.yaml gets the same mount,
 # restart, live-signal, and stopped-container behavior as other managed files.
 # ktranslate runs as a non-root UID. The active bind-mounted

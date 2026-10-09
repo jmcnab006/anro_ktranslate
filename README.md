@@ -638,3 +638,24 @@ ansible-lint
 ansible-playbook --syntax-check molecule/default/converge.yml
 molecule test
 ```
+
+## Runtime ownership and guarded SNMP activation
+
+Set `anro_ktranslate_runtime_uid` and `anro_ktranslate_runtime_gid` to the
+actual effective UID/GID inside the pinned ktranslate image when discovery or
+file output is enabled. Runtime directories use `0750`, not world-writable
+permissions. Ensure the image process can traverse the parent directories.
+
+Set `anro_ktranslate_snmp_validator_argv` to a **host-installed** validator
+command (list of arguments) that accepts the candidate YAML filename as its
+last argument and returns nonzero for invalid application configuration. The
+role validates before promoting the candidate. An empty list disables this
+optional application-level check; structural YAML checks still run.
+
+After systemd activation the role checks Docker running state, retrying with
+`anro_ktranslate_activation_retries` and
+`anro_ktranslate_activation_delay`. On activation failure it restores the
+previous `snmp.yaml` and attempts a restart, then fails the play. This is a
+**limited rollback**, not a transaction across every managed file, unit, or
+subsequent signal-based reload. For strict production health verification,
+add a workload-specific readiness probe; Docker running does not imply healthy.

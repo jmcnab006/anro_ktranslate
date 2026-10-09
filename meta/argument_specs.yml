@@ -20,6 +20,24 @@ argument_specs:
           - Default Docker image used when an instance does not set image.
           - Pin an explicit version or digest in production.
 
+      anro_ktranslate_runtime_uid:
+        type: int
+        description: Effective container UID for writable runtime output; required when output is enabled.
+      anro_ktranslate_runtime_gid:
+        type: int
+        description: Effective container GID for writable runtime output; required when output is enabled.
+      anro_ktranslate_snmp_validator_argv:
+        type: list
+        elements: str
+        default: []
+        description: Host-side validator command and arguments; staged YAML path is appended.
+      anro_ktranslate_activation_retries:
+        type: int
+        default: 10
+      anro_ktranslate_activation_delay:
+        type: int
+        default: 2
+
       anro_ktranslate_docker_binary:
         type: path
         default: "/usr/bin/docker"

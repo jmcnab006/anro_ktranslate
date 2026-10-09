@@ -8,6 +8,56 @@
     - vars/main.yaml
 
   tasks:
+    - name: VERIFY | Inspect runtime directory permissions
+      ansible.builtin.stat:
+        path: "/etc/ktranslate/{{ item }}/runtime"
+      loop:
+        - ktranslate-discovery-molecule
+        - ktranslate-traps-molecule
+      register: anro_ktranslate_runtime_directory_stats
+
+    - name: VERIFY | Assert runtime directories are restricted
+      ansible.builtin.assert:
+        that:
+          - item.stat.isdir
+          - item.stat.mode == '0750'
+          - item.stat.uid == anro_ktranslate_runtime_uid | int
+          - item.stat.gid == anro_ktranslate_runtime_gid | int
+      loop: "{{ anro_ktranslate_runtime_directory_stats.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: VERIFY | Check active SNMP checksum before rejected candidate
+      ansible.builtin.stat:
+        path: /etc/ktranslate/ktranslate-polling-ansible/snmp.yaml
+        checksum_algorithm: sha256
+      register: anro_ktranslate_snmp_before_rejection
+
+    - name: VERIFY | Exercise rejected application-level SNMP candidate
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - -i
+          - "{{ lookup('ansible.builtin.env', 'MOLECULE_INVENTORY_FILE') }}"
+          - "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_DIRECTORY') }}/verify_invalid_snmp_candidate.yml"
+      delegate_to: localhost
+      become: false
+      register: anro_ktranslate_rejected_candidate_run
+      changed_when: false
+      failed_when: false
+
+    - name: VERIFY | Check active SNMP checksum after rejected candidate
+      ansible.builtin.stat:
+        path: /etc/ktranslate/ktranslate-polling-ansible/snmp.yaml
+        checksum_algorithm: sha256
+      register: anro_ktranslate_snmp_after_rejection
+
+    - name: VERIFY | Assert rejected candidate did not replace active SNMP
+      ansible.builtin.assert:
+        that:
+          - anro_ktranslate_rejected_candidate_run.rc != 0
+          - anro_ktranslate_snmp_before_rejection.stat.checksum == anro_ktranslate_snmp_after_rejection.stat.checksum
+
     # These disabled instances exercise both supported no-profile forms. Their
     # successful unit creation proves omitted and null type values normalize from
     # global defaults directly into instance configuration.

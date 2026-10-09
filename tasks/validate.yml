@@ -6,6 +6,10 @@
     quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - anro_ktranslate_image | length > 0
+      - anro_ktranslate_snmp_validator_argv is sequence
+      - anro_ktranslate_snmp_validator_argv is not string
+      - anro_ktranslate_activation_retries | int > 0
+      - anro_ktranslate_activation_delay | int >= 0
       - anro_ktranslate_docker_binary is match('^/')
       - anro_ktranslate_systemd_dir is match('^/')
       - anro_ktranslate_config_dir is match('^/')
@@ -108,3 +112,26 @@
         (anro_ktranslate_instances | map(attribute='name') | list | length)
     fail_msg: "Every anro_ktranslate_instances entry must have a unique name."
   when: anro_ktranslate_instances | length > 0
+
+- name: VALIDATE | Validate optional SNMP validator arguments
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item | length > 0
+    quiet: true
+  loop: "{{ anro_ktranslate_snmp_validator_argv }}"
+  no_log: true
+
+- name: VALIDATE | Require runtime ownership for writable instances
+  ansible.builtin.assert:
+    that:
+      - anro_ktranslate_runtime_uid is not none
+      - anro_ktranslate_runtime_gid is not none
+      - anro_ktranslate_runtime_uid | string is match('^[0-9]+$')
+      - anro_ktranslate_runtime_gid | string is match('^[0-9]+$')
+    fail_msg: Set anro_ktranslate_runtime_uid and anro_ktranslate_runtime_gid to the image process identity.
+  when: >-
+    anro_ktranslate_instances | selectattr('discovery_output', 'defined')
+    | selectattr('discovery_output', 'equalto', true) | list | length > 0
+    or anro_ktranslate_instances | selectattr('runtime_output', 'defined')
+    | selectattr('runtime_output', 'equalto', true) | list | length > 0
