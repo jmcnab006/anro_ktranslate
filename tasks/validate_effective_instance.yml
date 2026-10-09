@@ -4,6 +4,7 @@
 # use only global instance defaults plus explicit instance configuration.
 - name: VALIDATE EFFECTIVE INSTANCE | Validate selected type for {{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - >-
         not (anro_ktranslate_raw_instance.type | default(None, true))
@@ -43,6 +44,7 @@
 # Docker command straightforward to diagnose from inventory.
 - name: VALIDATE EFFECTIVE INSTANCE | Validate CLI configuration mode for {{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - >-
         not (

@@ -3,6 +3,7 @@
   hosts: ktranslate-ubuntu-2404
   become: true
   vars_files:
+    - defaults/main.yaml
     - vars/main.yaml
 
   roles:

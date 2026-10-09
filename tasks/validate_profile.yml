@@ -4,6 +4,7 @@
 # errors do not appear only when a future deployment starts using the profile.
 - name: VALIDATE PROFILE | Validate supported keys for {{ anro_ktranslate_profile_entry.key }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - anro_ktranslate_profile_entry.value is mapping
       - (anro_ktranslate_profile_entry.value.ktranslate_args | default({})) is mapping
@@ -28,6 +29,7 @@
 # structured application configuration on the command line.
 - name: VALIDATE PROFILE | Validate keyed arguments for {{ anro_ktranslate_profile_entry.key }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - item.key is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
       - item.value is none or item.value is string or item.value is number or item.value is boolean
@@ -45,6 +47,7 @@
 # here so an unused profile cannot carry a malformed command unnoticed.
 - name: VALIDATE PROFILE | Validate raw command for {{ anro_ktranslate_profile_entry.key }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - item is string
       - "'\n' not in item"

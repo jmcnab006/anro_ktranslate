@@ -3,6 +3,7 @@
 # prefix keeps reconciliation safely scoped without rebuilding names elsewhere.
 - name: VALIDATE INSTANCE | Validate base structure for {{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - anro_ktranslate_raw_instance is mapping
       - anro_ktranslate_raw_instance.name is defined
@@ -55,6 +56,7 @@
 # the role's read-only configuration mounts.
 - name: VALIDATE INSTANCE | Validate discovery output for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - >-
         not (anro_ktranslate_raw_instance.discovery_output | default(false) | bool)
@@ -72,6 +74,7 @@
 # easy to create accidentally, so reject the ambiguous combination explicitly.
 - name: VALIDATE INSTANCE | Validate network and port compatibility for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - >-
         (anro_ktranslate_raw_instance.network | default(anro_ktranslate_default_network)) != 'host'
@@ -86,6 +89,7 @@
 # the world-readable systemd unit.
 - name: VALIDATE INSTANCE | Validate environment variables for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - item.key is match('^[A-Za-z_][A-Za-z0-9_]*$')
       - "'\n' not in (item.value | string)"
@@ -101,6 +105,7 @@
 # overlays on the baseline, so generic files must not claim the reserved path.
 - name: VALIDATE INSTANCE | Validate SNMP configuration inputs for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - >-
         anro_ktranslate_raw_instance.url is not defined
@@ -118,6 +123,7 @@
 # ownership seam for a future API/Git/NetBox renderer and are mounted read-only.
 - name: VALIDATE INSTANCE | Validate file definitions for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - item is mapping
       - item.name is defined
@@ -180,6 +186,7 @@
 # container destinations would make mount ordering determine the active file.
 - name: VALIDATE INSTANCE | Validate file names and destinations are unique for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - >-
         (anro_ktranslate_raw_instance.files | default([]) | map(attribute='name') | list | unique | length)
@@ -196,6 +203,7 @@
 
 - name: VALIDATE INSTANCE | Validate volume definitions for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - item is mapping
       - item.source is defined
@@ -216,6 +224,7 @@
 # address, host port, container port, and tcp/udp protocol.
 - name: VALIDATE INSTANCE | Validate port mappings for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - item is string
       - item is match('^[0-9.\\[\\]a-fA-F:]+:[0-9]+(/(tcp|udp))?$')
@@ -228,6 +237,7 @@
 
 - name: VALIDATE INSTANCE | Validate capability names for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - item is string
       - item is match('^[A-Z0-9_]+$')
@@ -243,6 +253,7 @@
 # allowed because it explicitly removes an inherited type-profile argument.
 - name: VALIDATE INSTANCE | Validate ktranslate arguments for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - item.key is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
       - item.value is none or item.value is string or item.value is number or item.value is boolean
@@ -258,6 +269,7 @@
 
 - name: VALIDATE INSTANCE | Validate command arguments for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - item is string
       - "'\n' not in item"
@@ -273,6 +285,7 @@
 # full CLI schema. Never place credentials here because unit files are readable.
 - name: VALIDATE INSTANCE | Validate extra Docker arguments for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - item is string
       - "'\n' not in item"

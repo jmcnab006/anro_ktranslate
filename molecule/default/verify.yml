@@ -4,6 +4,7 @@
   become: true
   gather_facts: false
   vars_files:
+    - defaults/main.yaml
     - vars/main.yaml
 
   tasks:

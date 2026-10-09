@@ -3,6 +3,7 @@
 # naming, and cross-field constraints that argument_specs cannot express cleanly.
 - name: VALIDATE | Validate global ktranslate settings
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - anro_ktranslate_image | length > 0
       - anro_ktranslate_docker_binary is match('^/')
@@ -34,6 +35,7 @@
 
 - name: VALIDATE | Assert Docker CLI is executable
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - anro_ktranslate_docker_binary_stat.stat.exists
       - anro_ktranslate_docker_binary_stat.stat.isreg
@@ -46,6 +48,7 @@
 # instance that does not provide an explicit command override.
 - name: VALIDATE | Validate default ktranslate command arguments
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - item is string
       - "'\n' not in item"
@@ -60,6 +63,7 @@
 # key such as "polling:" and cannot be safely normalized.
 - name: VALIDATE | Validate ktranslate profile definitions
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - item.key is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
       - item.value is not none
@@ -96,6 +100,7 @@
 # duplicates would cause destructive collisions even if their types differ.
 - name: VALIDATE | Assert ktranslate instance names are unique
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - >-
         (anro_ktranslate_instances | map(attribute='name') | list | unique | length)
