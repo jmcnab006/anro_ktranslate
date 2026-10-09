@@ -38,7 +38,7 @@
       ansible.builtin.set_fact:
         anro_ktranslate_remote_snmp_config: >-
           {{ anro_ktranslate_remote_snmp_slurp.content | b64decode | from_yaml }}
-      no_log: false
+      no_log: "{{ not anro_ktranslate_debug | default(true) | bool }}"
 
     - name: SNMP CONFIG | Assert downloaded configuration structure for {{ anro_ktranslate_instance.name }}
       ansible.builtin.assert:
@@ -55,7 +55,7 @@
             or anro_ktranslate_remote_snmp_config.trap is none
             or anro_ktranslate_remote_snmp_config.trap is mapping
         fail_msg: Downloaded SNMP configuration has an invalid structure.
-      no_log: true
+      no_log: "{{ not anro_ktranslate_debug | default(true) | bool }}"
   rescue:
     - name: SNMP CONFIG | Reject invalid downloaded configuration for {{ anro_ktranslate_instance.name }}
       ansible.builtin.fail:
@@ -103,7 +103,7 @@
     fail_msg: >-
       Merged SNMP configuration for {{ anro_ktranslate_instance.name }}
       has an invalid structure.
-  no_log: true
+  no_log: "{{ not anro_ktranslate_debug | default(true) | bool }}"
 
 - name: SNMP CONFIG | Validate YAML serialization for {{ anro_ktranslate_instance.name }}
   ansible.builtin.assert:
@@ -117,7 +117,7 @@
     fail_msg: >-
       Merged SNMP configuration for {{ anro_ktranslate_instance.name }}
       failed YAML serialization validation.
-  no_log: true
+  no_log: "{{ not anro_ktranslate_debug | default(true) | bool }}"
 
 # The downloaded YAML device block must retain its original scalar representation:
 # a YAML round-trip changes discovery timestamps and has been observed to make
@@ -136,7 +136,7 @@
           | default('', true)
         ) | trim
       }}
-  no_log: true
+  no_log: "{{ not anro_ktranslate_debug | default(true) | bool }}"
   when: anro_ktranslate_instance.url is defined
 
 - name: SNMP CONFIG | Select lossless device rendering for {{ anro_ktranslate_instance.name }}
@@ -174,7 +174,7 @@
         )
         | to_nice_yaml(indent=2, sort_keys=false)
       }}
-  no_log: true
+  no_log: "{{ not anro_ktranslate_debug | default(true) | bool }}"
   when: anro_ktranslate_preserve_source_devices | bool
 
 - name: SNMP CONFIG | Append preserved devices for {{ anro_ktranslate_instance.name }}
@@ -186,7 +186,7 @@
           anro_ktranslate_source_devices_block | trim
         ] | join('%c' | format(10))
       }}
-  no_log: true
+  no_log: "{{ not anro_ktranslate_debug | default(true) | bool }}"
   when: anro_ktranslate_preserve_source_devices | bool
 
 - name: SNMP CONFIG | Render complete configuration for {{ anro_ktranslate_instance.name }}
@@ -196,10 +196,12 @@
         anro_ktranslate_effective_snmp_config
         | to_nice_yaml(indent=2, sort_keys=false)
       }}
-  no_log: true
+  no_log: "{{ not anro_ktranslate_debug | default(true) | bool }}"
   when: not (anro_ktranslate_preserve_source_devices | bool)
 
-- name: SNMP CONFIG | Diagnose device preservation for {{ anro_ktranslate_instance.name }}
+- name: SNMP CONFIG DEBUG | Diagnose device preservation for {{ anro_ktranslate_instance.name }}
+  when:
+    - anro_ktranslate_debug | bool
   ansible.builtin.debug:
     msg:
       instance: "{{ anro_ktranslate_instance.name }}"
@@ -231,7 +233,9 @@
           | length > 0
         }}
 
-- name: SNMP CONFIG | Diagnose rendered device section for {{ anro_ktranslate_instance.name }}
+- name: SNMP CONFIG DEBUG | Diagnose rendered device section for {{ anro_ktranslate_instance.name }}
+  when:
+    - anro_ktranslate_debug | bool
   ansible.builtin.debug:
     msg:
       preservation_enabled: "{{ anro_ktranslate_preserve_source_devices | bool }}"
@@ -282,7 +286,7 @@
     fail_msg: >-
       Final rendered SNMP configuration is invalid or lost devices
       for {{ anro_ktranslate_instance.name }}.
-  no_log: true
+  no_log: "{{ not anro_ktranslate_debug | default(true) | bool }}"
 
 # Reuse the existing managed-file lifecycle so snmp.yaml gets the same mount,
 # restart, live-signal, and stopped-container behavior as other managed files.

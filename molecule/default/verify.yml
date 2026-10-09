@@ -218,9 +218,11 @@
         anro_ktranslate_verify_baseline_config: >-
           {{ anro_ktranslate_verify_snmp_files.results[2].content | b64decode | from_yaml }}
 
-    - name: VERIFY | Diagnostic output anro_ktranslate_verify_url_config
+    - name: VERIFY DEBUG | Debug output of anro_ktranslate_verify_url_config
       ansible.builtin.debug:
         var: anro_ktranslate_verify_url_config
+      when:
+        - anro_ktranslate_debug | bool
 
     - name: VERIFY | Confirm both configuration methods produced expected policy and devices
       ansible.builtin.assert:
@@ -370,13 +372,15 @@
       changed_when: false
       failed_when: false
 
-    - name: VERIFY | Display unavailable URL test diagnostics
+    - name: VERIFY DEBUG | Display unavailable URL test diagnostics
       ansible.builtin.debug:
         msg:
           - "Return code: {{ anro_ktranslate_missing_url_test.rc }}"
           - "STDOUT: {{ anro_ktranslate_missing_url_test.stdout }}"
           - "STDERR: {{ anro_ktranslate_missing_url_test.stderr }}"
-      when: anro_ktranslate_missing_url_test.rc != 0
+      when:
+        - anro_ktranslate_missing_url_test.rc != 0
+        - anro_ktranslate_debug | bool
 
     - name: VERIFY | Assert unavailable URL configuration was rejected
       ansible.builtin.assert:
