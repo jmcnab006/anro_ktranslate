@@ -1,7 +1,7 @@
+---
 # Match the ktranslate image runtime identity used by the Molecule fixture.
 anro_ktranslate_runtime_uid: 1000
 anro_ktranslate_runtime_gid: 1000
----
 anro_ktranslate_molecule_config_url: http://172.29.0.20:8080/devices.yaml
 
 # Molecule overlays exercise local-only and URL+local configuration precedence.

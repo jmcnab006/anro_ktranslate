@@ -22,6 +22,7 @@
 
 - name: INSTANCE | Require runtime identity for {{ anro_ktranslate_instance.name }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - anro_ktranslate_runtime_uid is not none
       - anro_ktranslate_runtime_gid is not none
@@ -123,7 +124,12 @@
     owner: root
     group: root
     mode: "0600"
-  when: anro_ktranslate_previous_snmp_stat.stat.exists
+  # Preserve the rollback snapshot on converged runs.
+  when:
+    - anro_ktranslate_previous_snmp_stat.stat.exists
+    - >-
+      anro_ktranslate_previous_snmp_stat.stat.checksum
+      != (anro_ktranslate_rendered_snmp_config | hash('sha1'))
   no_log: true
 
 - name: INSTANCE | Render managed files for {{ anro_ktranslate_instance.name }}
@@ -217,6 +223,7 @@
 # Docker to fail later with an invalid bind mount.
 - name: INSTANCE | Assert external files exist for {{ anro_ktranslate_instance.name }}
   ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
       - item.stat.exists
       - item.stat.isreg
