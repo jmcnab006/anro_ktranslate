@@ -1,0 +1,26 @@
+---
+- name: INSTANCE | Render environment file for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.template:
+    src: ktranslate.env.j2
+    dest: "{{ anro_ktranslate_environment_dir }}/{{ anro_ktranslate_instance.name }}.env"
+    owner: root
+    group: root
+    mode: "0600"
+  register: anro_ktranslate_environment_template
+  no_log: true
+
+# The unit includes checksums only for restart-bound external files. Signal-bound
+# files must not alter the unit or systemd would restart the container before a
+# live reload can occur.
+- name: INSTANCE | Render systemd unit for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.template:
+    src: ktranslate.service.j2
+    dest: "{{ anro_ktranslate_systemd_dir }}/{{ anro_ktranslate_instance.name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  register: anro_ktranslate_unit_template
+
+# Determine whether any managed file explicitly requires a restart. Registered
+# loop results retain the original file definition under item, allowing restart
+# and signal semantics to coexist within one instance.

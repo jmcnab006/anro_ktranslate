@@ -20,6 +20,19 @@ argument_specs:
           - Default Docker image used when an instance does not set image.
           - Pin an explicit version or digest in production.
 
+      anro_ktranslate_security_strict:
+        type: bool
+        default: false
+        description:
+          - Opt-in security policy requiring digest-pinned images and read-only mounts.
+          - Rejects arbitrary Docker arguments and Docker socket mounts.
+      anro_ktranslate_security_allowed_capabilities:
+        type: list
+        elements: str
+        default: []
+        description:
+          - Explicit capability allowlist enforced only in strict security mode.
+
       anro_ktranslate_runtime_uid:
         type: int
         description: Effective container UID for writable runtime output; required when output is enabled.

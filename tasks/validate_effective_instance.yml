@@ -64,3 +64,29 @@
   ansible.builtin.include_tasks: validate_instance.yml
   vars:
     anro_ktranslate_raw_instance: "{{ anro_ktranslate_validation_instance }}"
+
+# Reject dangerous escape hatches before any host files or units are changed.
+- name: VALIDATE EFFECTIVE INSTANCE | Enforce opt-in container security policy
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - "'@sha256:' in (anro_ktranslate_validation_instance.image | default(anro_ktranslate_image))"
+      - "(anro_ktranslate_validation_instance.cap_add | default([]) | difference(anro_ktranslate_security_allowed_capabilities)) | length == 0"
+      - "(anro_ktranslate_validation_instance.extra_docker_args | default([])) | length == 0"
+      - "(anro_ktranslate_validation_instance.volumes | default([]) | rejectattr('read_only', 'defined') | list | length) == 0"
+      - >-
+        (anro_ktranslate_validation_instance.volumes | default([])
+        | selectattr('read_only', 'defined')
+        | rejectattr('read_only', 'equalto', true)
+        | list | length) == 0
+      - >-
+        (anro_ktranslate_validation_instance.files | default([])
+        | selectattr('read_only', 'defined')
+        | rejectattr('read_only', 'equalto', true)
+        | list | length) == 0
+      - "(anro_ktranslate_validation_instance.volumes | default([]) | selectattr('source', 'search', '(^|/)docker\\.sock$') | list | length) == 0"
+    fail_msg: >-
+      Strict security requires a digest-pinned image, read-only mounts,
+      no arbitrary Docker arguments or Docker socket mounts, and only
+      explicitly permitted capabilities.
+  when: anro_ktranslate_security_strict | bool

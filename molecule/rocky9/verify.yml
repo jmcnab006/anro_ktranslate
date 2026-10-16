@@ -1,0 +1,29 @@
+---
+- name: SECURITY | Verify target platform prerequisites
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: SECURITY | Verify systemd is the service manager
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.service_mgr == 'systemd'
+
+    - name: SECURITY | Verify strict policy rejects unsafe configuration
+      block:
+        - name: SECURITY | Apply role with unsafe configuration
+          ansible.builtin.include_role:
+            name: anro_ktranslate
+
+        - name: SECURITY | Fail when unsafe configuration is accepted
+          ansible.builtin.fail:
+            msg: Strict security accepted an unsafe instance
+
+      rescue:
+        - name: SECURITY | Verify expected security rejection
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is defined
+              - "'Strict security requires' in ansible_failed_result.msg"
+            fail_msg: >-
+              The role failed for a reason other than strict security
+              validation: {{ ansible_failed_result.msg | default('Unknown failure') }}

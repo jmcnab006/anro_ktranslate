@@ -9,9 +9,15 @@ galaxy_info:
     - name: Debian
       versions:
         - bookworm
+    - name: Debian
+      versions:
+        - trixie
     - name: Ubuntu
       versions:
         - jammy
+    - name: Ubuntu
+      versions:
+        - noble
     - name: EL
       versions:
         - "9"

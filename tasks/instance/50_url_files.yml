@@ -1,0 +1,50 @@
+---
+- name: INSTANCE | Create URL download staging directory for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.file:
+    path: "{{ anro_ktranslate_current_config_dir }}/.downloads"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: >-
+    anro_ktranslate_instance.files
+    | selectattr('source', 'defined')
+    | selectattr('source', 'equalto', 'url')
+    | list
+    | length > 0
+
+- name: INSTANCE | Stage URL files for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "{{ anro_ktranslate_current_config_dir }}/.downloads/{{ item.name }}"
+    owner: root
+    group: root
+    mode: "0600"
+    validate_certs: "{{ item.validate_certs | default(true) | bool }}"
+  loop: "{{ anro_ktranslate_instance.files }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: (item.source | default('managed')) == 'url'
+  no_log: "{{ item.no_log | default(false) | bool }}"
+
+# Promotion occurs only after every URL download succeeds. copy compares staged
+# and active bytes, providing deterministic changed state for restart/signal
+# classification while preserving the active file on download failure.
+- name: INSTANCE | Promote downloaded URL files for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.copy:
+    src: "{{ anro_ktranslate_current_config_dir }}/.downloads/{{ item.name }}"
+    dest: "{{ anro_ktranslate_current_config_dir }}/{{ item.name }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "{{ item.mode | default('0640') }}"
+  loop: "{{ anro_ktranslate_instance.files }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: (item.source | default('managed')) == 'url'
+  register: anro_ktranslate_url_file_results
+  no_log: "{{ item.no_log | default(false) | bool }}"
+
+# External files are never modified by this role. Checksums serve two purposes:
+# restart-bound files are embedded into the unit; signal-bound files are compared
+# with private state from the previous successful converge.

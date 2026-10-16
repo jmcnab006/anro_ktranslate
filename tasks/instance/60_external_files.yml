@@ -1,0 +1,76 @@
+---
+- name: INSTANCE | Inspect external files for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.stat:
+    path: "{{ item.host_path }}"
+    get_checksum: true
+  loop: "{{ anro_ktranslate_instance.files }}"
+  loop_control:
+    label: "{{ item.host_path | default(item.name) }}"
+  when: (item.source | default('managed')) == 'external'
+  register: anro_ktranslate_external_file_stats
+
+# Fail before systemd/Docker when an external producer has not created its file.
+# This gives the producing pipeline a deterministic failure instead of allowing
+# Docker to fail later with an invalid bind mount.
+- name: INSTANCE | Assert external files exist for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+    fail_msg: >-
+      External file {{ item.item.host_path }} for {{ anro_ktranslate_instance.name }}
+      must exist before the ktranslate service is started.
+  loop: "{{ anro_ktranslate_external_file_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.host_path | default('UNKNOWN') }}"
+  when: not (item.skipped | default(false) | bool)
+
+# Read the last successfully applied checksums for signal-bound external files.
+# Missing state is normal on first deployment and deliberately does not cause a
+# signal because the container will consume current files when it starts.
+- name: INSTANCE | Inspect external signal checksum state for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.stat:
+    path: "{{ anro_ktranslate_external_signal_state_file }}"
+  register: anro_ktranslate_external_signal_state_stat
+
+- name: INSTANCE | Read external signal checksum state for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.slurp:
+    src: "{{ anro_ktranslate_external_signal_state_file }}"
+  register: anro_ktranslate_external_signal_state_slurp
+  when: anro_ktranslate_external_signal_state_stat.stat.exists
+  no_log: true
+
+# Decode state into a mapping keyed by host path. The file contains checksums
+# only, but no_log avoids exposing internal filesystem inventory unnecessarily.
+- name: INSTANCE | Initialize external signal checksum state for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_previous_external_signal_checksums: >-
+      {{
+        (anro_ktranslate_external_signal_state_slurp.content | b64decode | from_yaml)
+        if anro_ktranslate_external_signal_state_stat.stat.exists
+        else {}
+      }}
+    anro_ktranslate_current_external_signal_checksums: {}
+  no_log: true
+
+# Build current checksum state only for external files configured for live signal
+# reload. Restart-bound external checksums remain represented in the unit file.
+- name: INSTANCE | Build current external signal checksum state for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_current_external_signal_checksums: >-
+      {{
+        anro_ktranslate_current_external_signal_checksums
+        | combine({item.item.host_path: item.stat.checksum})
+      }}
+  loop: "{{ anro_ktranslate_external_file_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.host_path | default('SKIPPED') }}"
+  when:
+    - not (item.skipped | default(false) | bool)
+    - (item.item.reload | default('restart')) == 'signal'
+  no_log: true
+
+# Environment files always exist, including for an empty environment, which
+# keeps the generated Docker invocation stable and protects environment secrets
+# with root-only permissions.

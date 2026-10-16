@@ -659,3 +659,29 @@ previous `snmp.yaml` and attempts a restart, then fails the play. This is a
 **limited rollback**, not a transaction across every managed file, unit, or
 subsequent signal-based reload. For strict production health verification,
 add a workload-specific readiness probe; Docker running does not imply healthy.
+
+## Security hardening (opt-in)
+
+Set `anro_ktranslate_security_strict: true` to reject mutable image tags,
+write-enabled bind mounts, Docker socket mounts, arbitrary `extra_docker_args`,
+and capabilities not present in `anro_ktranslate_security_allowed_capabilities`.
+Use an image reference of the form `kentik/ktranslate@sha256:<digest>`.
+This policy is disabled by default to avoid changing existing deployments.
+For writable discovery/trap output, the dedicated runtime mount is still managed
+by the role; set `anro_ktranslate_runtime_uid` and `_gid` appropriately.
+The legacy `anro_ktranslate_default_volumes` mount is writable; override it
+with an appropriate read-only mount or an empty list before enabling strict mode.
+Do not put secrets in `extra_docker_args` or other systemd command arguments.
+
+## Supported operating systems and testing
+
+The role expects a running Docker Engine and systemd, provisioned separately.
+Ubuntu 22.04 and 24.04 and Rocky Linux 9 are the intended deployment targets.
+The default Molecule integration scenario targets Ubuntu 24.04; additional
+platform smoke scenarios validate role convergence on Ubuntu 22.04 and Rocky 9.
+Rocky deployments must verify bind-mount SELinux labels on an enforcing host;
+never disable SELinux to make a mount work. Nested Docker Molecule containers
+are not a substitute for a real SELinux-enforcing host or VM.
+
+Run `molecule test -s ubuntu2204` or `molecule test -s rocky9` for the
+platform smoke tests. Run `molecule test -s default` for the full integration suite.

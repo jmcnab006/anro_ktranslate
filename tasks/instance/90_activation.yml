@@ -1,0 +1,55 @@
+---
+- name: INSTANCE | Activate configuration with rollback on failure
+  block:
+    - name: INSTANCE | Manage service state for {{ anro_ktranslate_instance.name }}
+      ansible.builtin.systemd_service:
+        name: "{{ anro_ktranslate_instance.name }}.service"
+        enabled: "{{ anro_ktranslate_instance.enabled | bool }}"
+        daemon_reload: "{{ anro_ktranslate_unit_template.changed }}"
+        state: >-
+          {{
+            'restarted'
+            if (anro_ktranslate_instance.enabled | bool and anro_ktranslate_instance_restart_required)
+            else ('started' if anro_ktranslate_instance.enabled | bool else 'stopped')
+          }}
+
+    # systemd active alone is insufficient: Docker must report a running process.
+    - name: INSTANCE | Verify container is running after activation
+      ansible.builtin.command:
+        argv:
+          - "{{ anro_ktranslate_docker_binary }}"
+          - inspect
+          - --format
+          - "{{ '{{.State.Running}}' }}"
+          - "{{ anro_ktranslate_instance.name }}"
+      register: anro_ktranslate_activation_state
+      changed_when: false
+      until: anro_ktranslate_activation_state.rc == 0 and anro_ktranslate_activation_state.stdout | trim == 'true'
+      retries: "{{ anro_ktranslate_activation_retries }}"
+      delay: "{{ anro_ktranslate_activation_delay }}"
+      when: anro_ktranslate_instance.enabled | bool
+  rescue:
+    - name: INSTANCE | Restore previous SNMP configuration after activation failure
+      ansible.builtin.copy:
+        src: "{{ anro_ktranslate_current_config_dir }}/.snmp-rollback.yaml"
+        dest: "{{ anro_ktranslate_current_config_dir }}/snmp.yaml"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      when: anro_ktranslate_previous_snmp_stat.stat.exists
+      no_log: true
+
+    - name: INSTANCE | Restart service with restored configuration
+      ansible.builtin.systemd_service:
+        name: "{{ anro_ktranslate_instance.name }}.service"
+        state: restarted
+      when: anro_ktranslate_previous_snmp_stat.stat.exists and anro_ktranslate_instance.enabled | bool
+
+    - name: INSTANCE | Fail deployment after rollback
+      ansible.builtin.fail:
+        msg: "Activation failed for {{ anro_ktranslate_instance.name }}; previous SNMP configuration restored when available."
+
+# Collect signals required by changed managed files. ktranslate's supported SNMP
+# device reload uses USR2, while reload_signal remains configurable for future
+# workloads that expose a different signal-based reload contract.

@@ -1,0 +1,28 @@
+---
+- name: Verify strict security rejects unsafe instance declarations
+  hosts: ktranslate-ubuntu-2204
+  become: true
+  tasks:
+    - name: Exercise security validation
+      block:
+        - name: Validate unsafe configuration
+          ansible.builtin.include_role:
+            name: anro_ktranslate
+          vars:
+            anro_ktranslate_security_strict: true
+            anro_ktranslate_instances:
+              - name: ktranslate-insecure
+                enabled: true
+                image: kentik/ktranslate:latest
+                volumes:
+                  - source: /var/run/docker.sock
+                    target: /var/run/docker.sock
+                    read_only: false
+        - name: Fail if security validation accepted unsafe configuration
+          ansible.builtin.fail:
+            msg: Strict security accepted an unsafe instance
+      rescue:
+        - name: Confirm failure occurred in security validation
+          ansible.builtin.assert:
+            that:
+              - "'Strict security requires' in ansible_failed_result.msg"

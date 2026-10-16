@@ -1,0 +1,28 @@
+---
+- name: INSTANCE | Render managed files for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.copy:
+    dest: "{{ anro_ktranslate_current_config_dir }}/{{ item.name }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode | default('0640') }}"
+    content: >-
+      {{
+        item.content
+        if (item.format | default('raw')) == 'raw'
+        else (
+          item.content | to_nice_json(indent=2)
+          if (item.format | default('raw')) == 'json'
+          else item.content | to_nice_yaml(indent=2, sort_keys=false)
+        )
+      }}
+  loop: "{{ anro_ktranslate_instance.files }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: (item.source | default('managed')) == 'managed'
+  register: anro_ktranslate_managed_file_results
+  no_log: "{{ item.no_log | default(false) | bool }}"
+
+# URL files are staged before replacing active configuration. If any download
+# fails, Ansible stops here and no staged file is promoted, so the running
+# container keeps the complete last-known-good device configuration and receives
+# no restart or reload signal.

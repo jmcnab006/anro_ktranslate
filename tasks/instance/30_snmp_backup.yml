@@ -1,0 +1,21 @@
+---
+- name: INSTANCE | Inspect previous active SNMP configuration
+  ansible.builtin.stat:
+    path: "{{ anro_ktranslate_current_config_dir }}/snmp.yaml"
+  register: anro_ktranslate_previous_snmp_stat
+
+- name: INSTANCE | Back up previous active SNMP configuration
+  ansible.builtin.copy:
+    src: "{{ anro_ktranslate_current_config_dir }}/snmp.yaml"
+    dest: "{{ anro_ktranslate_current_config_dir }}/.snmp-rollback.yaml"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0600"
+  # Preserve the rollback snapshot on converged runs.
+  when:
+    - anro_ktranslate_previous_snmp_stat.stat.exists
+    - >-
+      anro_ktranslate_previous_snmp_stat.stat.checksum
+      != (anro_ktranslate_rendered_snmp_config | hash('sha1'))
+  no_log: true

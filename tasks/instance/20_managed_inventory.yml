@@ -1,0 +1,54 @@
+---
+- name: INSTANCE | Build desired managed file list for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_desired_managed_file_names: >-
+      {{
+        (
+          (anro_ktranslate_instance.files | default([], true))
+          | selectattr('source', 'undefined')
+          | map(attribute='name')
+          | list
+        )
+        +
+        (
+          (anro_ktranslate_instance.files | default([], true))
+          | selectattr('source', 'defined')
+          | selectattr('source', 'equalto', 'managed')
+          | map(attribute='name')
+          | list
+        )
+        +
+        (
+          (anro_ktranslate_instance.files | default([], true))
+          | selectattr('source', 'defined')
+          | selectattr('source', 'equalto', 'url')
+          | map(attribute='name')
+          | list
+        )
+      }}
+
+# Hidden files are intentionally excluded so .external-signal-checksums.yml is
+# lifecycle metadata rather than an application configuration artifact.
+- name: INSTANCE | Find existing managed files for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.find:
+    paths: "{{ anro_ktranslate_current_config_dir }}"
+    file_type: file
+    recurse: false
+    hidden: false
+  register: anro_ktranslate_existing_managed_files
+
+# Removing a previously mounted managed file changes container mount topology.
+# Treat this as restart-bound even if the removed file used signal reloads.
+- name: INSTANCE | Remove obsolete managed files for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ anro_ktranslate_existing_managed_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: (item.path | basename) not in anro_ktranslate_desired_managed_file_names
+  register: anro_ktranslate_obsolete_managed_files
+
+# Render only files owned by Ansible. reload=restart preserves the traditional
+# behavior; reload=signal allows device inventory changes to be consumed by a
+# running ktranslate process without replacing its container.

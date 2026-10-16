@@ -1,0 +1,11 @@
+---
+- name: SECURITY | Converge ktranslate role on target platform
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    anro_ktranslate_instances: []
+    anro_ktranslate_reconcile: false
+  roles:
+    - role: anro_ktranslate

@@ -1,0 +1,32 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: docker
+platforms:
+  - name: ktranslate-rocky9
+    image: "geerlingguy/docker-rockylinux9-ansible:latest"
+    # Preserve the existing image, command, volumes, and other settings.
+    user: root
+    override_command: false
+    pre_build_image: true
+    privileged: true
+    cgroupns_mode: host
+    command: "/usr/sbin/init"
+    env:
+      container: docker
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    tmpfs:
+      - /run
+      - /tmp
+provisioner:
+  name: ansible
+  inventory:
+    host_vars:
+      ktranslate-rocky9:
+        ansible_user: root
+        ansible_become: false
+        ansible_python_interpreter: /usr/bin/python3
+verifier:
+  name: ansible

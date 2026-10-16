@@ -1,0 +1,60 @@
+---
+- name: INSTANCE | Determine restart-bound managed file changes for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_restart_managed_files_changed: >-
+      {{
+        anro_ktranslate_managed_file_results.results
+        | selectattr('changed', 'defined')
+        | selectattr('changed', 'equalto', true)
+        | selectattr('item.reload', 'undefined')
+        | list
+        | length > 0
+        or
+        anro_ktranslate_managed_file_results.results
+        | selectattr('changed', 'defined')
+        | selectattr('changed', 'equalto', true)
+        | selectattr('item.reload', 'defined')
+        | selectattr('item.reload', 'equalto', 'restart')
+        | list
+        | length > 0
+      }}
+
+# URL files use the same lifecycle contract as managed files. Download changes
+# can therefore request either a container restart or a post-reconcile signal.
+- name: INSTANCE | Determine restart-bound URL file changes for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_restart_url_files_changed: >-
+      {{
+        anro_ktranslate_url_file_results.results
+        | selectattr('changed', 'defined')
+        | selectattr('changed', 'equalto', true)
+        | selectattr('item.reload', 'undefined')
+        | list
+        | length > 0
+        or
+        anro_ktranslate_url_file_results.results
+        | selectattr('changed', 'defined')
+        | selectattr('changed', 'equalto', true)
+        | selectattr('item.reload', 'defined')
+        | selectattr('item.reload', 'equalto', 'restart')
+        | list
+        | length > 0
+      }}
+
+# Consolidate all conditions that require container replacement. Live reload is
+# suppressed when a restart occurs because the newly started process already
+# reads the latest mounted files.
+- name: INSTANCE | Determine restart requirement for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_instance_restart_required: >-
+      {{
+        anro_ktranslate_restart_managed_files_changed
+        or anro_ktranslate_restart_url_files_changed
+        or (anro_ktranslate_obsolete_managed_files.changed | default(false))
+        or anro_ktranslate_environment_template.changed
+        or anro_ktranslate_unit_template.changed
+      }}
+
+# A converged run leaves the container untouched. Configuration that cannot be
+# reloaded safely causes a restart, while disabled instances are stopped and
+# disabled without special workload-specific code.

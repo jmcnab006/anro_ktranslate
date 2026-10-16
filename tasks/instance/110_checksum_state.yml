@@ -1,0 +1,9 @@
+---
+- name: INSTANCE | Persist external signal checksum state for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.copy:
+    dest: "{{ anro_ktranslate_external_signal_state_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+    content: "{{ anro_ktranslate_current_external_signal_checksums | to_nice_yaml(indent=2, sort_keys=true) }}"
+  no_log: true

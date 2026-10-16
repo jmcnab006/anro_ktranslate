@@ -116,3 +116,9 @@ anro_ktranslate_instances: []
 anro_ktranslate_snmp_config: {}
 
 anro_ktranslate_validate_certs: true
+
+# Optional production guardrails. Disabled by default to preserve existing deployments.
+# Enabling this policy requires immutable image references and safe Docker options.
+anro_ktranslate_security_strict: false
+# Restrict capabilities to this allowlist when strict security is enabled.
+anro_ktranslate_security_allowed_capabilities: []

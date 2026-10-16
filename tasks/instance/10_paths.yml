@@ -1,0 +1,57 @@
+---
+- name: INSTANCE | Set derived paths for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.set_fact:
+    anro_ktranslate_current_config_dir: "{{ anro_ktranslate_config_dir }}/{{ anro_ktranslate_instance.name }}"
+    anro_ktranslate_external_signal_state_file: >-
+      {{ anro_ktranslate_config_dir }}/{{ anro_ktranslate_instance.name }}/.external-signal-checksums.yml
+
+# The per-instance directory stores role-managed configuration and the private
+# checksum state used to detect externally owned reloadable file changes. It must
+# remain traversable by the non-root UID used by the ktranslate container because
+# individual configuration files are bind-mounted from beneath this directory.
+- name: INSTANCE | Create configuration directory for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.file:
+    path: "{{ anro_ktranslate_current_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: INSTANCE | Require runtime identity for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
+    that:
+      - anro_ktranslate_runtime_uid is not none
+      - anro_ktranslate_runtime_gid is not none
+      - anro_ktranslate_runtime_uid | string is match('^[0-9]+$')
+      - anro_ktranslate_runtime_gid | string is match('^[0-9]+$')
+  when: >-
+    (anro_ktranslate_instance.discovery_output | default(false) | bool)
+    or (anro_ktranslate_instance.runtime_output | default(false) | bool)
+
+# Give ktranslate a dedicated writable directory for runtime output. A direct
+# file bind prevents metadata/replace operations used by some outputs, while
+# mounting all of /etc/ktranslate would overlap the role's read-only configuration
+# mounts. The image runtime UID/GID is not part of the role contract, so only the
+# isolated runtime directory is writable by the container.
+- name: INSTANCE | Create runtime output directory for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.file:
+    path: "{{ anro_ktranslate_current_config_dir }}/runtime"
+    state: directory
+    owner: "{{ anro_ktranslate_runtime_uid }}"
+    group: "{{ anro_ktranslate_runtime_gid }}"
+    mode: "0750"
+  when: >-
+    (anro_ktranslate_instance.discovery_output | default(false) | bool)
+    or (anro_ktranslate_instance.runtime_output | default(false) | bool)
+
+# snmp.yaml is always role-owned. Resolve baseline, optional URL, and optional
+# local config before generic file reconciliation so download/parse failures are
+# fail-closed and cannot disturb the last-known-good active configuration.
+- name: INSTANCE | Resolve effective SNMP configuration for {{ anro_ktranslate_instance.name }}
+  ansible.builtin.include_tasks: snmp_config.yml
+
+# Only declared managed files participate in file reconciliation. Runtime
+# output is application-owned beneath a dedicated subdirectory, which the non-recursive
+# managed-file cleanup intentionally leaves untouched. External files and hidden
+# checksum state remain outside managed-file cleanup as before.
