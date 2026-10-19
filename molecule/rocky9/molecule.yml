@@ -1,8 +1,10 @@
 ---
 dependency:
   name: galaxy
+
 driver:
   name: docker
+
 platforms:
   - name: ktranslate-rocky9
     image: "geerlingguy/docker-rockylinux9-ansible:latest"
@@ -20,6 +22,7 @@ platforms:
     tmpfs:
       - /run
       - /tmp
+
 provisioner:
   name: ansible
   inventory:
@@ -28,5 +31,14 @@ provisioner:
         ansible_user: root
         ansible_become: false
         ansible_python_interpreter: /usr/bin/python3
+
 verifier:
   name: ansible
+
+ansible:
+  cfg:
+    defaults:
+      deprecation_warnings: false
+      callbacks_enabled: profile_tasks
+      pipelining: true
+      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/..

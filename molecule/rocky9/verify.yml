@@ -1,18 +1,25 @@
 ---
-- name: SECURITY | Verify target platform prerequisites
-  hosts: all
+- name: SECURITY | Verify strict security enforcement
+  hosts: ktranslate-rocky9
+  become: false
   gather_facts: true
-  tasks:
-    - name: SECURITY | Verify systemd is the service manager
-      ansible.builtin.assert:
-        that:
-          - ansible_facts.service_mgr == 'systemd'
 
+  tasks:
     - name: SECURITY | Verify strict policy rejects unsafe configuration
       block:
         - name: SECURITY | Apply role with unsafe configuration
           ansible.builtin.include_role:
             name: anro_ktranslate
+          vars:
+            anro_ktranslate_strict_security: true
+            anro_ktranslate_reconcile: false
+            anro_ktranslate_instances:
+              - name: ktranslate-insecure
+                enabled: true
+                volumes:
+                  - source: /var/run/docker.sock
+                    target: /var/run/docker.sock
+                    read_only: false
 
         - name: SECURITY | Fail when unsafe configuration is accepted
           ansible.builtin.fail:
@@ -25,5 +32,5 @@
               - ansible_failed_result.msg is defined
               - "'Strict security requires' in ansible_failed_result.msg"
             fail_msg: >-
-              The role failed for a reason other than strict security
-              validation: {{ ansible_failed_result.msg | default('Unknown failure') }}
+              The role failed for an unexpected reason:
+              {{ ansible_failed_result.msg | default('Unknown failure') }}

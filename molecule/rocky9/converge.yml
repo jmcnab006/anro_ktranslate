@@ -1,6 +1,6 @@
 ---
 - name: SECURITY | Converge ktranslate role on target platform
-  hosts: all
+  hosts: ktranslate-rocky9
   become: false
   gather_facts: true
 

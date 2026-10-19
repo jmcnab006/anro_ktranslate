@@ -1,8 +1,10 @@
 ---
 dependency:
   name: galaxy
+
 driver:
   name: docker
+
 platforms:
   - name: ktranslate-ubuntu-2204
     image: "geerlingguy/docker-ubuntu2204-ansible:latest"
@@ -19,5 +21,14 @@ platforms:
       - /tmp
 provisioner:
   name: ansible
+
 verifier:
   name: ansible
+
+ansible:
+  cfg:
+    defaults:
+      deprecation_warnings: false
+      callbacks_enabled: profile_tasks
+      pipelining: true
+      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/..
