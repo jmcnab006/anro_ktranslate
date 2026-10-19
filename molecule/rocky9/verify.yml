@@ -11,7 +11,7 @@
           ansible.builtin.include_role:
             name: anro_ktranslate
           vars:
-            anro_ktranslate_strict_security: true
+            anro_ktranslate_security_strict: true
             anro_ktranslate_reconcile: false
             anro_ktranslate_instances:
               - name: ktranslate-insecure
