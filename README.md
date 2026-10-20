@@ -288,6 +288,7 @@ anro_ktranslate_instances:
     ports: []
     files: []
     volumes: []
+    # Optional additional capabilities; NET_RAW is always included for ktranslate.
     cap_add: []
 
     # Mergeable normal CLI override surface.
@@ -298,6 +299,13 @@ anro_ktranslate_instances:
 
     extra_podman_args: []
 ```
+
+Podman always adds `NET_RAW` (`anro_ktranslate_required_capabilities`) because the
+upstream ktranslate executable has `cap_net_raw=ep`. Without this capability,
+Podman may fail to start the container with `operation not permitted`.
+Instance `cap_add` supplies additional capabilities; duplicates are removed.
+Strict security continues to allow only explicitly approved *additional*
+capabilities through `anro_ktranslate_security_allowed_capabilities`.
 
 ## Managed files
 

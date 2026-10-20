@@ -20,6 +20,11 @@ anro_ktranslate_activation_delay: 2
 anro_ktranslate_podman_packages:
   - podman
 
+# The upstream ktranslate ELF has cap_net_raw=ep; Podman must include
+# NET_RAW in the bounding set or execve fails with EPERM.
+anro_ktranslate_required_capabilities:
+  - NET_RAW
+
 # Absolute executable path used by role-generated systemd units.
 anro_ktranslate_podman_binary: "/usr/bin/podman"
 
