@@ -9,9 +9,9 @@
   when: (item.source | default('managed')) == 'external'
   register: anro_ktranslate_external_file_stats
 
-# Fail before systemd/Docker when an external producer has not created its file.
+# Fail before systemd/Podman when an external producer has not created its file.
 # This gives the producing pipeline a deterministic failure instead of allowing
-# Docker to fail later with an invalid bind mount.
+# Podman to fail later with an invalid bind mount.
 - name: INSTANCE | Assert external files exist for {{ anro_ktranslate_instance.name }}
   ansible.builtin.assert:
     quiet: "{{ not (anro_ktranslate_debug | bool) }}"
@@ -72,5 +72,5 @@
   no_log: true
 
 # Environment files always exist, including for an empty environment, which
-# keeps the generated Docker invocation stable and protects environment secrets
+# keeps the generated Podman invocation stable and protects environment secrets
 # with root-only permissions.

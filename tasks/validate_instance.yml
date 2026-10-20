@@ -45,8 +45,8 @@
       - (anro_ktranslate_raw_instance.cap_add | default([])) is not string
       - (anro_ktranslate_raw_instance.command | default(anro_ktranslate_default_command)) is sequence
       - (anro_ktranslate_raw_instance.command | default(anro_ktranslate_default_command)) is not string
-      - (anro_ktranslate_raw_instance.extra_docker_args | default([])) is sequence
-      - (anro_ktranslate_raw_instance.extra_docker_args | default([])) is not string
+      - (anro_ktranslate_raw_instance.extra_podman_args | default([])) is sequence
+      - (anro_ktranslate_raw_instance.extra_podman_args | default([])) is not string
     fail_msg: >-
       Invalid ktranslate instance definition for
       {{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}.
@@ -70,7 +70,7 @@
       Instance {{ anro_ktranslate_raw_instance.name }} enables discovery_output
       and must define snmp_out_file under /etc/ktranslate/runtime/.
 
-# Docker ignores --publish with host networking and duplicate host listeners are
+# Podman ignores --publish with host networking and duplicate host listeners are
 # easy to create accidentally, so reject the ambiguous combination explicitly.
 - name: VALIDATE INSTANCE | Validate network and port compatibility for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
@@ -81,10 +81,10 @@
         or
         (anro_ktranslate_raw_instance.ports | default([]) | length) == 0
     fail_msg: >-
-      Instance {{ anro_ktranslate_raw_instance.name }} uses Docker host networking
+      Instance {{ anro_ktranslate_raw_instance.name }} uses Podman host networking
       and must not define published ports.
 
-# Newlines are rejected because Docker env-files are line-oriented. Values may
+# Newlines are rejected because Podman env-files are line-oriented. Values may
 # still contain spaces and punctuation and are passed without exposing them in
 # the world-readable systemd unit.
 - name: VALIDATE INSTANCE | Validate environment variables for {{ anro_ktranslate_raw_instance.name }}
@@ -220,7 +220,7 @@
   loop_control:
     label: "{{ item.source | default('INVALID') }}"
 
-# This accepts the common Docker forms used by the role, including optional host
+# This accepts the common Podman forms used by the role, including optional host
 # address, host port, container port, and tcp/udp protocol.
 - name: VALIDATE INSTANCE | Validate port mappings for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
@@ -229,8 +229,8 @@
       - item is string
       - item is match('^[0-9.\\[\\]a-fA-F:]+:[0-9]+(/(tcp|udp))?$')
     fail_msg: >-
-      Invalid Docker port mapping '{{ item }}' for {{ anro_ktranslate_raw_instance.name }}.
-      Use Docker publish syntax such as '127.0.0.1:18082:8082/tcp' or '1162:1162/udp'.
+      Invalid Podman port mapping '{{ item }}' for {{ anro_ktranslate_raw_instance.name }}.
+      Use Podman publish syntax such as '127.0.0.1:18082:8082/tcp' or '1162:1162/udp'.
   loop: "{{ anro_ktranslate_raw_instance.ports | default([]) }}"
   loop_control:
     label: "{{ item }}"
@@ -281,9 +281,9 @@
   loop_control:
     label: "{{ item }}"
 
-# This is deliberately an escape hatch, not an attempt to duplicate Docker's
+# This is deliberately an escape hatch, not an attempt to duplicate Podman's
 # full CLI schema. Never place credentials here because unit files are readable.
-- name: VALIDATE INSTANCE | Validate extra Docker arguments for {{ anro_ktranslate_raw_instance.name }}
+- name: VALIDATE INSTANCE | Validate extra Podman arguments for {{ anro_ktranslate_raw_instance.name }}
   ansible.builtin.assert:
     quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
@@ -291,8 +291,8 @@
       - "'\n' not in item"
       - "'\r' not in item"
     fail_msg: >-
-      Extra Docker arguments for {{ anro_ktranslate_raw_instance.name }} must be
+      Extra Podman arguments for {{ anro_ktranslate_raw_instance.name }} must be
       single-line strings.
-  loop: "{{ anro_ktranslate_raw_instance.extra_docker_args | default([]) }}"
+  loop: "{{ anro_ktranslate_raw_instance.extra_podman_args | default([]) }}"
   loop_control:
     label: "{{ item }}"

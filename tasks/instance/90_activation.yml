@@ -13,11 +13,11 @@
             else ('started' if anro_ktranslate_instance.enabled | bool else 'stopped')
           }}
 
-    # systemd active alone is insufficient: Docker must report a running process.
+    # systemd active alone is insufficient: Podman must report a running process.
     - name: INSTANCE | Verify container is running after activation
       ansible.builtin.command:
         argv:
-          - "{{ anro_ktranslate_docker_binary }}"
+          - "{{ anro_ktranslate_podman_binary }}"
           - inspect
           - --format
           - "{{ '{{.State.Running}}' }}"

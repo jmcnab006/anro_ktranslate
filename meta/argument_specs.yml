@@ -1,7 +1,7 @@
 ---
 argument_specs:
   main:
-    short_description: Manage multiple ktranslate Docker containers as systemd services.
+    short_description: Manage multiple ktranslate Podman containers as systemd services.
     description:
       - >-
         Deploys a desired stack of independent ktranslate containers without
@@ -15,9 +15,9 @@ argument_specs:
     options:
       anro_ktranslate_image:
         type: str
-        default: "kentik/ktranslate:latest"
+        default: "docker.io/kentik/ktranslate:latest"
         description:
-          - Default Docker image used when an instance does not set image.
+          - Default Podman image used when an instance does not set image.
           - Pin an explicit version or digest in production.
 
       anro_ktranslate_security_strict:
@@ -25,7 +25,7 @@ argument_specs:
         default: false
         description:
           - Opt-in security policy requiring digest-pinned images and read-only mounts.
-          - Rejects arbitrary Docker arguments and Docker socket mounts.
+          - Rejects arbitrary Podman arguments and Podman socket mounts.
       anro_ktranslate_security_allowed_capabilities:
         type: list
         elements: str
@@ -51,12 +51,12 @@ argument_specs:
         type: int
         default: 2
 
-      anro_ktranslate_docker_binary:
+      anro_ktranslate_podman_binary:
         type: path
-        default: "/usr/bin/docker"
+        default: "/usr/bin/podman"
         description:
-          - Absolute path to the Docker CLI.
-          - Docker installation is intentionally outside this role.
+          - Absolute path to the Podman CLI.
+          - Podman installation is intentionally outside this role.
 
       anro_ktranslate_systemd_dir:
         type: path
@@ -74,7 +74,7 @@ argument_specs:
         type: path
         default: "/etc/ktranslate/environment"
         description:
-          - Root-only directory for generated Docker environment files.
+          - Root-only directory for generated Podman environment files.
 
       anro_ktranslate_service_prefix:
         type: str
@@ -86,7 +86,7 @@ argument_specs:
         type: str
         default: "bridge"
         description:
-          - Default Docker network mode for instances.
+          - Default Podman network mode for instances.
 
       anro_ktranslate_default_pull_policy:
         type: str
@@ -96,7 +96,7 @@ argument_specs:
           - missing
           - never
         description:
-          - Default value passed to Docker run --pull.
+          - Default value passed to Podman run --pull.
 
       anro_ktranslate_default_restart_sec:
         type: int
@@ -108,7 +108,7 @@ argument_specs:
         type: int
         default: 30
         description:
-          - Default Docker stop timeout in seconds.
+          - Default Podman stop timeout in seconds.
 
       anro_ktranslate_default_start_limit_interval_sec:
         type: int
@@ -179,14 +179,14 @@ argument_specs:
         description:
           - Desired set of independent ktranslate containers.
           - >-
-            The name is the exact systemd unit and Docker container basename.
+            The name is the exact systemd unit and Podman container basename.
             Type is optional; a non-empty type selects the same-named profile.
         options:
           name:
             type: str
             required: true
             description:
-              - Exact Docker container and systemd service basename.
+              - Exact Podman container and systemd service basename.
               - Must begin with anro_ktranslate_service_prefix followed by a dash.
 
           type:
@@ -219,12 +219,12 @@ argument_specs:
           image:
             type: str
             description:
-              - Per-instance Docker image override.
+              - Per-instance Podman image override.
 
           network:
             type: str
             description:
-              - Per-instance Docker network mode override.
+              - Per-instance Podman network mode override.
               - Host-network instances must not define ports.
 
           pull_policy:
@@ -234,7 +234,7 @@ argument_specs:
               - missing
               - never
             description:
-              - Per-instance Docker image pull policy override.
+              - Per-instance Podman image pull policy override.
 
           restart_sec:
             type: int
@@ -244,7 +244,7 @@ argument_specs:
           stop_timeout:
             type: int
             description:
-              - Per-instance Docker stop timeout in seconds.
+              - Per-instance Podman stop timeout in seconds.
 
           start_limit_interval_sec:
             type: int
@@ -260,7 +260,7 @@ argument_specs:
             type: dict
             default: {}
             description:
-              - Environment variables written to a root-only Docker env file.
+              - Environment variables written to a root-only Podman env file.
               - Prefer this surface for credentials when ktranslate supports it.
 
           ports:
@@ -268,7 +268,7 @@ argument_specs:
             elements: str
             default: []
             description:
-              - Docker publish specifications such as 127.0.0.1:18082:8082/tcp.
+              - Podman publish specifications such as 127.0.0.1:18082:8082/tcp.
               - Must be empty when network is host.
 
           discovery_output:
@@ -319,7 +319,7 @@ argument_specs:
             type: str
             default: USR2
             description:
-              - Docker signal sent when reload is signal and the container is running.
+              - Podman signal sent when reload is signal and the container is running.
 
           files:
             type: list
@@ -460,7 +460,7 @@ argument_specs:
             elements: str
             default: []
             description:
-              - Linux capabilities passed to Docker with --cap-add.
+              - Linux capabilities passed to Podman with --cap-add.
 
           command:
             type: list
@@ -474,10 +474,10 @@ argument_specs:
                 ktranslate_args is present after normalization, the role uses
                 anro_ktranslate_default_command.
 
-          extra_docker_args:
+          extra_podman_args:
             type: list
             elements: str
             default: []
             description:
-              - Escape hatch for Docker run options not modeled by the role.
+              - Escape hatch for Podman run options not modeled by the role.
               - Do not place credentials here because unit files are readable.

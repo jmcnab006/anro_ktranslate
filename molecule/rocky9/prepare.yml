@@ -1,51 +1,23 @@
 ---
-- name: SECURITY PREPARE| Prepare Rocky Linux 9 for KTranslate testing
+- name: PREPARE | Install Podman inside Docker-provisioned Rocky Linux 9 host
   hosts: ktranslate-rocky9
   become: false
-  gather_facts: true
-
   tasks:
-    - name: SECURITY PREPARE| Install DNF repository management tools
+    # The Molecule driver remains Docker on the controller. No nested dockerd.
+    - name: PREPARE | Install Podman and container networking
       ansible.builtin.dnf:
         name:
-          - dnf-plugins-core
+          - podman
+          - containernetworking-plugins
           - ca-certificates
-        state: present
-
-    - name: SECURITY PREPARE | Configure official Docker CE repository
-      ansible.builtin.yum_repository:
-        name: docker-ce-stable
-        description: Docker CE Stable
-        baseurl: https://download.docker.com/linux/centos/9/$basearch/stable
-        enabled: true
-        gpgcheck: true
-        gpgkey: https://download.docker.com/linux/centos/gpg
-        state: present
-
-    - name: SECURITY PREPARE | Install Docker Engine
-      ansible.builtin.dnf:
-        name:
-          - docker-ce
-          - docker-ce-cli
-          - containerd.io
-          - docker-buildx-plugin
-          - docker-compose-plugin
         state: present
         update_cache: true
 
-    - name: SECURITY PREPARE | Start and enable Docker
-      ansible.builtin.systemd_service:
-        name: docker
-        state: started
-        enabled: true
-
-    - name: SECURITY PREPARE | Verify Docker daemon
+    - name: PREPARE | Verify Podman CLI
       ansible.builtin.command:
         argv:
-          - /usr/bin/docker
-          - info
-      register: anro_ktranslate_molecule_docker_info
+          - /usr/bin/podman
+          - --version
+      register: anro_ktranslate_molecule_podman_version
       changed_when: false
-      retries: 5
-      delay: 3
-      until: anro_ktranslate_molecule_docker_info.rc == 0
+      failed_when: anro_ktranslate_molecule_podman_version.rc != 0

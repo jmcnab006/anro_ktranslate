@@ -48,12 +48,12 @@
   loop_control:
     label: "{{ item }}"
 
-# docker rm returns non-zero for an already absent container. Treat that specific
-# state as converged while preserving unexpected Docker failures.
+# podman rm returns non-zero for an already absent container. Treat that specific
+# state as converged while preserving unexpected Podman failures.
 - name: RECONCILE | Remove stale containers
   ansible.builtin.command:
     argv:
-      - "{{ anro_ktranslate_docker_binary }}"
+      - "{{ anro_ktranslate_podman_binary }}"
       - rm
       - --force
       - "{{ item }}"

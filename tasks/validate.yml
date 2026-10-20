@@ -10,7 +10,7 @@
       - anro_ktranslate_snmp_validator_argv is not string
       - anro_ktranslate_activation_retries | int > 0
       - anro_ktranslate_activation_delay | int >= 0
-      - anro_ktranslate_docker_binary is match('^/')
+      - anro_ktranslate_podman_binary is match('^/')
       - anro_ktranslate_systemd_dir is match('^/')
       - anro_ktranslate_config_dir is match('^/')
       - anro_ktranslate_environment_dir is match('^/')
@@ -30,23 +30,23 @@
       - anro_ktranslate_instances is not string
     fail_msg: "Invalid global anro_ktranslate role configuration."
 
-# Docker installation remains deliberately outside this role; fail with a clear
+# Podman installation remains deliberately outside this role; fail with a clear
 # message instead of allowing generated systemd units to fail later at runtime.
-- name: VALIDATE | Inspect configured Docker CLI
+- name: VALIDATE | Inspect configured Podman CLI
   ansible.builtin.stat:
-    path: "{{ anro_ktranslate_docker_binary }}"
-  register: anro_ktranslate_docker_binary_stat
+    path: "{{ anro_ktranslate_podman_binary }}"
+  register: anro_ktranslate_podman_binary_stat
 
-- name: VALIDATE | Assert Docker CLI is executable
+- name: VALIDATE | Assert Podman CLI is executable
   ansible.builtin.assert:
     quiet: "{{ not (anro_ktranslate_debug | bool) }}"
     that:
-      - anro_ktranslate_docker_binary_stat.stat.exists
-      - anro_ktranslate_docker_binary_stat.stat.isreg
-      - anro_ktranslate_docker_binary_stat.stat.executable
+      - anro_ktranslate_podman_binary_stat.stat.exists
+      - anro_ktranslate_podman_binary_stat.stat.isreg
+      - anro_ktranslate_podman_binary_stat.stat.executable
     fail_msg: >-
-      Docker CLI {{ anro_ktranslate_docker_binary }} is not executable. Install
-      Docker before applying anro_ktranslate or override anro_ktranslate_docker_binary.
+      Podman CLI {{ anro_ktranslate_podman_binary }} is not executable. Install
+      Podman before applying anro_ktranslate or override anro_ktranslate_podman_binary.
 
 # Validate the default command separately because it is inherited by any
 # instance that does not provide an explicit command override.
@@ -100,7 +100,7 @@
     label: >-
       {{ anro_ktranslate_raw_instance.type | default('UNKNOWN') }}/{{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}
 
-# Exact instance names are the systemd unit and Docker container basenames, so
+# Exact instance names are the systemd unit and Podman container basenames, so
 # duplicates would cause destructive collisions even if their types differ.
 - name: VALIDATE | Assert ktranslate instance names are unique
   ansible.builtin.assert:

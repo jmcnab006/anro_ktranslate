@@ -1,0 +1,35 @@
+---
+# A Docker-backed unit can remain active while a replacement Podman unit is
+# installed. Explicitly block this situation before modifying host state.
+- name: MIGRATION | Inspect existing desired service units
+  ansible.builtin.stat:
+    path: "{{ anro_ktranslate_systemd_dir }}/{{ item.name }}.service"
+  loop: "{{ anro_ktranslate_instances }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: anro_ktranslate_migration_unit_stats
+
+- name: MIGRATION | Read existing desired service units
+  ansible.builtin.slurp:
+    src: "{{ item.stat.path }}"
+  loop: "{{ anro_ktranslate_migration_unit_stats.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: item.stat.exists
+  register: anro_ktranslate_migration_unit_contents
+
+- name: MIGRATION | Require explicit authorization for Docker-backed units
+  ansible.builtin.assert:
+    that:
+      - anro_ktranslate_allow_docker_migration | bool
+    fail_msg: >-
+      Existing Docker-backed service {{ item.item.item.name }} detected.
+      Stop and disable the old service, remove its Docker container, then set
+      anro_ktranslate_allow_docker_migration=true for the migration run.
+  loop: "{{ anro_ktranslate_migration_unit_contents.results }}"
+  loop_control:
+    label: "{{ item.item.item.name | default('skipped') }}"
+  when:
+    - not (item.skipped | default(false) | bool)
+    - anro_ktranslate_managed_marker in (item.content | b64decode)
+    - "'docker.service' in (item.content | b64decode) or '/usr/bin/docker ' in (item.content | b64decode)"

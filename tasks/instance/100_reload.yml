@@ -43,11 +43,11 @@
 
 # Send each requested signal once after systemd has reconciled service state.
 # Never signal after a restart, and never signal a disabled instance. command is
-# appropriate because Docker exposes signaling as an imperative runtime action.
+# appropriate because Podman exposes signaling as an imperative runtime action.
 - name: INSTANCE | Inspect container state before dynamic reload
   ansible.builtin.command:
     argv:
-      - "{{ anro_ktranslate_docker_binary }}"
+      - "{{ anro_ktranslate_podman_binary }}"
       - inspect
       - --format
       - "{{ '{{.State.Running}}' }}"
@@ -56,7 +56,7 @@
   changed_when: false
   failed_when:
     # rc=1 with "No such" is expected when the service failed before creating
-    # the container. Other Docker failures must remain fatal.
+    # the container. Other Podman failures must remain fatal.
     - anro_ktranslate_reload_container_state.rc != 0
     - "'No such object' not in anro_ktranslate_reload_container_state.stderr"
     - "'No such container' not in anro_ktranslate_reload_container_state.stderr"
@@ -71,7 +71,7 @@
 - name: INSTANCE | Reload changed dynamic files for {{ anro_ktranslate_instance.name }}
   ansible.builtin.command:
     argv:
-      - "{{ anro_ktranslate_docker_binary }}"
+      - "{{ anro_ktranslate_podman_binary }}"
       - kill
       - --signal
       - "{{ item }}"

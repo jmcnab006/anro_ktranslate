@@ -41,7 +41,7 @@
 
 # A raw command and keyed arguments represent two different configuration modes.
 # Rejecting their combination avoids hidden precedence and makes the generated
-# Docker command straightforward to diagnose from inventory.
+# Podman command straightforward to diagnose from inventory.
 - name: VALIDATE EFFECTIVE INSTANCE | Validate CLI configuration mode for {{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}
   ansible.builtin.assert:
     quiet: "{{ not (anro_ktranslate_debug | bool) }}"
@@ -72,7 +72,7 @@
     that:
       - "'@sha256:' in (anro_ktranslate_validation_instance.image | default(anro_ktranslate_image))"
       - "(anro_ktranslate_validation_instance.cap_add | default([]) | difference(anro_ktranslate_security_allowed_capabilities)) | length == 0"
-      - "(anro_ktranslate_validation_instance.extra_docker_args | default([])) | length == 0"
+      - "(anro_ktranslate_validation_instance.extra_podman_args | default([])) | length == 0"
       - "(anro_ktranslate_validation_instance.volumes | default([]) | rejectattr('read_only', 'defined') | list | length) == 0"
       - >-
         (anro_ktranslate_validation_instance.volumes | default([])
@@ -84,9 +84,9 @@
         | selectattr('read_only', 'defined')
         | rejectattr('read_only', 'equalto', true)
         | list | length) == 0
-      - "(anro_ktranslate_validation_instance.volumes | default([]) | selectattr('source', 'search', '(^|/)docker\\.sock$') | list | length) == 0"
+      - "(anro_ktranslate_validation_instance.volumes | default([]) | selectattr('source', 'search', '(^|/)podman\\.sock$') | list | length) == 0"
     fail_msg: >-
       Strict security requires a digest-pinned image, read-only mounts,
-      no arbitrary Docker arguments or Docker socket mounts, and only
+      no arbitrary Podman arguments or Podman socket mounts, and only
       explicitly permitted capabilities.
   when: anro_ktranslate_security_strict | bool

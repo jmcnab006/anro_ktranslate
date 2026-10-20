@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: anro_ktranslate
   author: jmcnab006
-  description: Manage scalable ktranslate Docker containers as systemd services.
+  description: Manage ktranslate containers with rootful Podman and systemd.
   license: MIT
   min_ansible_version: "2.15"
   platforms:

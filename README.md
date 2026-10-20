@@ -1,6 +1,36 @@
+# v0.4.3-beta — Podman runtime migration
+
+**Production:** rootful Podman, supervised by systemd. **Molecule driver:** Docker.
+The role does not install Podman; install the distribution `podman` package before convergence.
+Docker is not a supported application runtime. Rocky Linux 9 is the primary target.
+
+Podman requires fully qualified image names; the default is
+`docker.io/kentik/ktranslate:latest`. Fully qualify per-instance images too.
+
+## Fresh-install Podman deployment
+
+This beta targets new deployments. There is no Docker-to-Podman migration guard,
+compatibility mode, or automatic cleanup of Docker-managed containers. Docker
+is used only by the Molecule test driver; it is not an application runtime.
+
+Install Podman on the managed host, configure `anro_ktranslate_instances`, and
+converge the role. The role manages ktranslate services using Podman and systemd.
+
+## SELinux and nested testing
+
+Keep SELinux enforcing in production. Bind-mount labels must be provisioned
+appropriately on the host; `:z`/`:Z` semantics differ for shared vs private
+mounts. Docker-driver Molecule containers cannot establish full SELinux parity
+with a real Rocky Linux 9 host. Test production mount labels separately.
+
+`molecule test -s default` uses a Docker-provisioned Rocky Linux 9 host with
+Podman installed inside it. `molecule test -s ubuntu2404` retains the older
+full integration fixture as a separate scenario; its cross-engine network
+assumptions must be validated before treating it as a release gate.
+
 # anro_ktranslate
 
-`anro_ktranslate` manages a stack of independent `ktranslate` Docker containers
+`anro_ktranslate` manages a stack of independent `ktranslate` Podman containers
 as systemd services. The role intentionally manages **container lifecycle and
 configuration delivery**, not ktranslate's application schema.
 
@@ -8,7 +38,7 @@ That boundary keeps the role small while allowing each instance to use any
 ktranslate-supported input mode, format, sink, network mode, command-line option,
 or configuration file layout.
 
-Docker installation is intentionally out of scope. Install and start Docker
+Podman installation is intentionally out of scope. Install and start Podman
 before applying this role.
 
 ## Design principles
@@ -46,16 +76,16 @@ option. A `null` argument removes the inherited option.
 `ktranslate_args`. There is deliberately no profile inheritance, command-list
 position merging, or profile-to-profile inheritance.
 
-For every instance, `name` is the canonical systemd unit, Docker container, and
+For every instance, `name` is the canonical systemd unit, Podman container, and
 configuration basename. Names must begin with `anro_ktranslate_service_prefix`
 (default `ktranslate-`) so reconciliation remains safely scoped.
 
 ## What the role owns
 
-The role owns systemd/Docker lifecycle, container runtime options, static managed
+The role owns systemd/Podman lifecycle, container runtime options, static managed
 files, HTTP/HTTPS-downloaded files, external file mounts, dynamic file reload
 signaling, and reconciliation of
-removed role-managed instances. Docker installation and Grafana Alloy remain out
+removed role-managed instances. Podman installation and Grafana Alloy remain out
 of scope.
 
 The role intentionally does not reproduce ktranslate's full application schema.
@@ -198,7 +228,7 @@ ensuring every non-empty type has a defined configuration contract.
 
 ```yaml
 anro_ktranslate_image: "kentik/ktranslate:latest"
-anro_ktranslate_docker_binary: "/usr/bin/docker"
+anro_ktranslate_podman_binary: "/usr/bin/podman"
 anro_ktranslate_systemd_dir: "/etc/systemd/system"
 anro_ktranslate_config_dir: "/etc/ktranslate"
 anro_ktranslate_environment_dir: "/etc/ktranslate/environment"
@@ -247,7 +277,7 @@ anro_ktranslate_instances:
     # Raw escape hatch; do not use together with ktranslate_args.
     # command: []
 
-    extra_docker_args: []
+    extra_podman_args: []
 ```
 
 ## Managed files
@@ -379,7 +409,7 @@ anro_ktranslate_instances:
 ```
 
 The external host file must exist when this role converges. Failing early is
-intentional: otherwise Docker would fail later with an invalid bind mount.
+intentional: otherwise Podman would fail later with an invalid bind mount.
 
 By default, the role records the external file checksum in a comment in the
 generated unit. If the external file changes before a later Ansible run, the
@@ -493,7 +523,7 @@ network: host
 ports: []
 ```
 
-The role rejects `ports` with `network: host`. Docker port publishing is not
+The role rejects `ports` with `network: host`. Podman port publishing is not
 applicable when the container shares the host network namespace. Multiple
 host-network containers must also be configured so they do not bind the same
 listener ports.
@@ -568,21 +598,21 @@ Shard renderer
 ```
 
 Use stable poller names rather than CIDRs in service names. Device assignments
-can then move between shard files without renaming systemd services or Docker
+can then move between shard files without renaming systemd services or Podman
 containers. CPU, memory, restart/OOM, poll duration, and device-count metrics can
 inform when inventory automation should split a shard; the role should continue
 to deploy declared desired state rather than making autonomous scaling decisions.
 
 ## Security
 
-- Docker environment files are mode `0600` under a root-only directory.
+- Podman environment files are mode `0600` under a root-only directory.
 - Managed file modes are explicit and default to `0640`.
 - Use `no_log: true` for managed file content that contains secrets.
-- `command` and `extra_docker_args` are stored in the systemd unit and can be
+- `command` and `extra_podman_args` are stored in the systemd unit and can be
   visible through process inspection; do not put credentials there.
 - External files remain owned by their producing system or role.
 - Bind-mount paths and instance names are validated before service changes.
-- Docker installation and daemon security policy are intentionally separate from
+- Podman installation and daemon security policy are intentionally separate from
   this role.
 
 ## Molecule
@@ -602,7 +632,7 @@ Install Molecule and Dependencies
 ```bash
 python3 -m pip install --upgrade pip setuptools
 ```
-- Install Molecule Documentation along with Ansible and optional linters or drivers (like Docker or Podman):
+- Install Molecule Documentation along with Ansible and optional linters or drivers (like Podman or Podman):
 ```bash
 pip install ansible-core molecule "molecule-plugins[docker]" ansible-lint
 ````
@@ -613,10 +643,10 @@ molecule --version
 ansible --version
 ````
 
-The default Molecule scenario runs Ubuntu 24.04 with a real nested Docker daemon.
+The legacy full integration Molecule scenario runs Ubuntu 24.04 with a real nested Podman daemon.
 It verifies:
 
-- systemd -> Docker lifecycle;
+- systemd -> Podman lifecycle;
 - bridge networking and port publishing;
 - host networking without `--publish`;
 - two independent polling services: one fully Ansible-managed and one URL-merged;
@@ -629,7 +659,7 @@ It verifies:
 - SIGUSR2 reload of changed device inventory without replacing either polling container.
 
 The nested workload image is also Ubuntu 24.04 so the lifecycle test does not
-hide behavior behind a mock Docker CLI.
+hide behavior behind a mock Podman CLI.
 
 Run:
 
@@ -652,18 +682,18 @@ last argument and returns nonzero for invalid application configuration. The
 role validates before promoting the candidate. An empty list disables this
 optional application-level check; structural YAML checks still run.
 
-After systemd activation the role checks Docker running state, retrying with
+After systemd activation the role checks Podman running state, retrying with
 `anro_ktranslate_activation_retries` and
 `anro_ktranslate_activation_delay`. On activation failure it restores the
 previous `snmp.yaml` and attempts a restart, then fails the play. This is a
 **limited rollback**, not a transaction across every managed file, unit, or
 subsequent signal-based reload. For strict production health verification,
-add a workload-specific readiness probe; Docker running does not imply healthy.
+add a workload-specific readiness probe; Podman running does not imply healthy.
 
 ## Security hardening (opt-in)
 
 Set `anro_ktranslate_security_strict: true` to reject mutable image tags,
-write-enabled bind mounts, Docker socket mounts, arbitrary `extra_docker_args`,
+write-enabled bind mounts, Podman socket mounts, arbitrary `extra_podman_args`,
 and capabilities not present in `anro_ktranslate_security_allowed_capabilities`.
 Use an image reference of the form `kentik/ktranslate@sha256:<digest>`.
 This policy is disabled by default to avoid changing existing deployments.
@@ -671,16 +701,16 @@ For writable discovery/trap output, the dedicated runtime mount is still managed
 by the role; set `anro_ktranslate_runtime_uid` and `_gid` appropriately.
 The legacy `anro_ktranslate_default_volumes` mount is writable; override it
 with an appropriate read-only mount or an empty list before enabling strict mode.
-Do not put secrets in `extra_docker_args` or other systemd command arguments.
+Do not put secrets in `extra_podman_args` or other systemd command arguments.
 
 ## Supported operating systems and testing
 
-The role expects a running Docker Engine and systemd, provisioned separately.
+The role expects a running Podman Engine and systemd, provisioned separately.
 Ubuntu 22.04 and 24.04 and Rocky Linux 9 are the intended deployment targets.
-The default Molecule integration scenario targets Ubuntu 24.04; additional
+The legacy full integration Molecule scenario targets Ubuntu 24.04; additional
 platform smoke scenarios validate role convergence on Ubuntu 22.04 and Rocky 9.
 Rocky deployments must verify bind-mount SELinux labels on an enforcing host;
-never disable SELinux to make a mount work. Nested Docker Molecule containers
+never disable SELinux to make a mount work. Nested Podman Molecule containers
 are not a substitute for a real SELinux-enforcing host or VM.
 
 Run `molecule test -s ubuntu2204` or `molecule test -s rocky9` for the

@@ -1,84 +1,22 @@
 ---
-- name: Prepare
+- name: PREPARE | Install Podman inside Docker-provisioned Rocky Linux 9 host
   hosts: ktranslate-ubuntu-2204
-  become: true
-  vars_files:
-    - defaults/main.yaml
-    - vars/main.yaml
-
+  become: false
   tasks:
-    - name: PREPARE | Install Docker runtime and SNMP client tools
+    # The Molecule driver remains Docker on the controller. No nested dockerd.
+    - name: PREPARE | Install Podman and container networking
       ansible.builtin.apt:
         name:
+          - podman
           - ca-certificates
-          - curl
-          - docker.io
-          - snmp
         state: present
         update_cache: true
 
-    - name: PREPARE | Create Docker configuration directory
-      ansible.builtin.file:
-        path: /etc/docker
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-
-    - name: PREPARE | Configure Docker for nested Molecule execution
-      ansible.builtin.copy:
-        dest: /etc/docker/daemon.json
-        owner: root
-        group: root
-        mode: "0644"
-        content: |
-          {
-            "storage-driver": "vfs"
-          }
-      register: anro_ktranslate_molecule_docker_config
-
-    - name: PREPARE | Start nested Docker daemon
-      ansible.builtin.systemd_service:
-        name: docker.service
-        enabled: true
-        daemon_reload: true
-        state: >-
-          {{
-            'restarted'
-            if anro_ktranslate_molecule_docker_config.changed
-            else 'started'
-          }}
-
-    - name: PREPARE | Wait for nested Docker daemon
+    - name: PREPARE | Verify Podman CLI
       ansible.builtin.command:
         argv:
-          - /usr/bin/docker
-          - info
-      register: anro_ktranslate_molecule_docker_info
+          - /usr/bin/podman
+          - --version
+      register: anro_ktranslate_molecule_podman_version
       changed_when: false
-      retries: 15
-      delay: 2
-      until: anro_ktranslate_molecule_docker_info.rc == 0
-
-    # A dedicated Docker network makes both the test SNMP agent and ktranslate
-    # reachable by stable container name rather than transient container IP.
-    - name: PREPARE | Check integration-test Docker network
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/docker
-          - network
-          - inspect
-          - ktranslate-molecule
-      register: anro_ktranslate_molecule_network
-      changed_when: false
-      failed_when: anro_ktranslate_molecule_network.rc not in [0, 1]
-
-    - name: PREPARE | Create integration-test Docker network
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/docker
-          - network
-          - create
-          - ktranslate-molecule
-      when: anro_ktranslate_molecule_network.rc == 1
-      changed_when: true
+      failed_when: anro_ktranslate_molecule_podman_version.rc != 0
