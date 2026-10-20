@@ -17,8 +17,8 @@
               - name: ktranslate-insecure
                 enabled: true
                 volumes:
-                  - source: /var/run/docker.sock
-                    target: /var/run/docker.sock
+                  - source: /var/run/podman.sock
+                    target: /var/run/podman.sock
                     read_only: false
 
         - name: SECURITY | Fail when unsafe configuration is accepted
@@ -29,8 +29,15 @@
         - name: SECURITY | Verify expected security rejection
           ansible.builtin.assert:
             that:
+              - ansible_failed_task is defined
+              - ansible_failed_result is defined
               - ansible_failed_result.msg is defined
-              - "'Strict security requires' in ansible_failed_result.msg"
+              - ansible_failed_task.name == 'VALIDATE EFFECTIVE INSTANCE | Enforce opt-in container security policy'
+              - ansible_failed_result.assertion is defined
+              - "'@sha256:' in ansible_failed_result.assertion"
+              - ansible_failed_result.evaluated_to is defined
+              - not (ansible_failed_result.evaluated_to | bool)
+              - "'Strict security requires a digest-pinned image' in ansible_failed_result.msg"
             fail_msg: >-
               The role failed for an unexpected reason:
               {{ ansible_failed_result.msg | default('Unknown failure') }}

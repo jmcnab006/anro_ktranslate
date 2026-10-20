@@ -1,23 +1,9 @@
 ---
-- name: PREPARE | Install Podman inside Docker-provisioned Rocky Linux 9 host
-  hosts: ktranslate-rocky9
-  become: false
+# Podman installation is intentionally exercised during role convergence.
+# Docker is used only by the Molecule driver on the controller.
+- name: PREPARE | Verify managed host is reachable
+  hosts: all
+  gather_facts: false
   tasks:
-    # The Molecule driver remains Docker on the controller. No nested dockerd.
-    - name: PREPARE | Install Podman and container networking
-      ansible.builtin.dnf:
-        name:
-          - podman
-          - containernetworking-plugins
-          - ca-certificates
-        state: present
-        update_cache: true
-
-    - name: PREPARE | Verify Podman CLI
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/podman
-          - --version
-      register: anro_ktranslate_molecule_podman_version
-      changed_when: false
-      failed_when: anro_ktranslate_molecule_podman_version.rc != 0
+    - name: PREPARE | Verify Ansible connectivity
+      ansible.builtin.ping:

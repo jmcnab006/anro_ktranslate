@@ -4,6 +4,11 @@
 - name: MAIN | Validate ktranslate role configuration
   ansible.builtin.import_tasks: validate.yml
 
+# Package installation belongs to the role: systemd units must not rely on
+# Podman being provisioned by an unrelated playbook or Molecule prepare step.
+- name: MAIN | Install Podman runtime dependencies
+  ansible.builtin.import_tasks: runtime_dependencies.yml
+
 - name: MAIN | Prepare ktranslate host directories
   ansible.builtin.import_tasks: directories.yml
 

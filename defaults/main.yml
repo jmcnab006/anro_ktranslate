@@ -14,8 +14,13 @@ anro_ktranslate_snmp_validator_argv: []
 # Wait for Podman to report a running container after activation.
 anro_ktranslate_activation_retries: 10
 anro_ktranslate_activation_delay: 2
-# Podman is intentionally installed outside this role. Override only when the
-# Podman CLI is installed at a non-standard absolute path.
+# Install Podman using distribution-managed packages. Package dependencies
+# (conmon, OCI runtime, networking and storage helpers) are resolved by the OS.
+# Override the list only for a supported custom package repository or platform.
+anro_ktranslate_podman_packages:
+  - podman
+
+# Absolute executable path used by role-generated systemd units.
 anro_ktranslate_podman_binary: "/usr/bin/podman"
 
 # Host paths used for role-managed systemd units and configuration artifacts.

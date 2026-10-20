@@ -30,24 +30,6 @@
       - anro_ktranslate_instances is not string
     fail_msg: "Invalid global anro_ktranslate role configuration."
 
-# Podman installation remains deliberately outside this role; fail with a clear
-# message instead of allowing generated systemd units to fail later at runtime.
-- name: VALIDATE | Inspect configured Podman CLI
-  ansible.builtin.stat:
-    path: "{{ anro_ktranslate_podman_binary }}"
-  register: anro_ktranslate_podman_binary_stat
-
-- name: VALIDATE | Assert Podman CLI is executable
-  ansible.builtin.assert:
-    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
-    that:
-      - anro_ktranslate_podman_binary_stat.stat.exists
-      - anro_ktranslate_podman_binary_stat.stat.isreg
-      - anro_ktranslate_podman_binary_stat.stat.executable
-    fail_msg: >-
-      Podman CLI {{ anro_ktranslate_podman_binary }} is not executable. Install
-      Podman before applying anro_ktranslate or override anro_ktranslate_podman_binary.
-
 # Validate the default command separately because it is inherited by any
 # instance that does not provide an explicit command override.
 - name: VALIDATE | Validate default ktranslate command arguments

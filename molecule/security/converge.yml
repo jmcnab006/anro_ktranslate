@@ -15,8 +15,8 @@
                 enabled: true
                 image: kentik/ktranslate:latest
                 volumes:
-                  - source: /var/run/docker.sock
-                    target: /var/run/docker.sock
+                  - source: /var/run/podman.sock
+                    target: /var/run/podman.sock
                     read_only: false
         - name: Fail if security validation accepted unsafe configuration
           ansible.builtin.fail:
@@ -25,4 +25,15 @@
         - name: Confirm failure occurred in security validation
           ansible.builtin.assert:
             that:
-              - "'Strict security requires' in ansible_failed_result.msg"
+              - ansible_failed_task is defined
+              - ansible_failed_result is defined
+              - ansible_failed_result.msg is defined
+              - ansible_failed_task.name == 'VALIDATE EFFECTIVE INSTANCE | Enforce opt-in container security policy'
+              - ansible_failed_result.assertion is defined
+              - "'@sha256:' in ansible_failed_result.assertion"
+              - ansible_failed_result.evaluated_to is defined
+              - not (ansible_failed_result.evaluated_to | bool)
+              - "'Strict security requires a digest-pinned image' in ansible_failed_result.msg"
+            fail_msg: >-
+              Unexpected failure during strict security test:
+              {{ ansible_failed_result.msg | default('Unknown failure') }}

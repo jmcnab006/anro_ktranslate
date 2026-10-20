@@ -1,11 +1,29 @@
 # v0.4.3-beta — Podman runtime migration
 
 **Production:** rootful Podman, supervised by systemd. **Molecule driver:** Docker.
-The role does not install Podman; install the distribution `podman` package before convergence.
+The role installs Podman from the managed host distribution packages before configuring systemd units.
 Docker is not a supported application runtime. Rocky Linux 9 is the primary target.
 
 Podman requires fully qualified image names; the default is
 `docker.io/kentik/ktranslate:latest`. Fully qualify per-instance images too.
+
+## Podman package dependencies
+
+The role installs `anro_ktranslate_podman_packages` using
+`ansible.builtin.package` before creating directories or systemd units. The
+standard Rocky Linux 9 package list is `[podman]`; DNF resolves `conmon`, the
+OCI runtime, network helpers, and storage dependencies automatically. On
+supported Debian/Ubuntu systems the distribution package manager likewise
+resolves the required dependencies. Package repositories must be configured
+and reachable; this role does not add third-party repositories.
+
+The package-install task uses privilege escalation and is idempotent. Other
+host changes still follow the role's existing privilege model. Podman does not
+require an enabled daemon or socket for rootful systemd-managed containers.
+The configured `anro_ktranslate_podman_binary` is checked *after* installation.
+
+Molecule continues using Docker solely as its host driver. Podman installation
+is tested by the role itself, not by a Molecule `prepare.yml` package task.
 
 ## Fresh-install Podman deployment
 
@@ -13,8 +31,8 @@ This beta targets new deployments. There is no Docker-to-Podman migration guard,
 compatibility mode, or automatic cleanup of Docker-managed containers. Docker
 is used only by the Molecule test driver; it is not an application runtime.
 
-Install Podman on the managed host, configure `anro_ktranslate_instances`, and
-converge the role. The role manages ktranslate services using Podman and systemd.
+Configure `anro_ktranslate_instances` and converge the role; Podman is
+installed automatically. The role manages ktranslate services using Podman and systemd.
 
 ## SELinux and nested testing
 
@@ -38,8 +56,8 @@ That boundary keeps the role small while allowing each instance to use any
 ktranslate-supported input mode, format, sink, network mode, command-line option,
 or configuration file layout.
 
-Podman installation is intentionally out of scope. Install and start Podman
-before applying this role.
+Podman installation is handled by this role. Podman is daemonless; do not
+start or enable `podman.service` or `podman.socket` for these systemd units.
 
 ## Design principles
 
@@ -85,8 +103,7 @@ configuration basename. Names must begin with `anro_ktranslate_service_prefix`
 The role owns systemd/Podman lifecycle, container runtime options, static managed
 files, HTTP/HTTPS-downloaded files, external file mounts, dynamic file reload
 signaling, and reconciliation of
-removed role-managed instances. Podman installation and Grafana Alloy remain out
-of scope.
+removed role-managed instances. Grafana Alloy remains out of scope.
 
 The role intentionally does not reproduce ktranslate's full application schema.
 Complex application data belongs in mounted files; the small `ktranslate_args`
@@ -228,6 +245,8 @@ ensuring every non-empty type has a defined configuration contract.
 
 ```yaml
 anro_ktranslate_image: "kentik/ktranslate:latest"
+anro_ktranslate_podman_packages:
+  - podman
 anro_ktranslate_podman_binary: "/usr/bin/podman"
 anro_ktranslate_systemd_dir: "/etc/systemd/system"
 anro_ktranslate_config_dir: "/etc/ktranslate"
@@ -612,8 +631,8 @@ to deploy declared desired state rather than making autonomous scaling decisions
   visible through process inspection; do not put credentials there.
 - External files remain owned by their producing system or role.
 - Bind-mount paths and instance names are validated before service changes.
-- Podman installation and daemon security policy are intentionally separate from
-  this role.
+- Podman is installed through the distribution package manager. The role does
+  not enable Podman API sockets or manage system-wide container policy.
 
 ## Molecule
 ### Installation

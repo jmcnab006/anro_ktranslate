@@ -51,12 +51,22 @@ argument_specs:
         type: int
         default: 2
 
+      anro_ktranslate_podman_packages:
+        type: list
+        elements: str
+        default:
+          - podman
+        description:
+          - Distribution packages installed by the role before deploying containers.
+          - Package manager resolves required OCI, networking, and storage dependencies.
+          - Override only when using a supported alternative package repository.
+
       anro_ktranslate_podman_binary:
         type: path
         default: "/usr/bin/podman"
         description:
           - Absolute path to the Podman CLI.
-          - Podman installation is intentionally outside this role.
+          - The role installs Podman from distribution packages before validating this path.
 
       anro_ktranslate_systemd_dir:
         type: path
