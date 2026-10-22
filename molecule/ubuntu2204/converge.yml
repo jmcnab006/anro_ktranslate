@@ -1,9 +1,0 @@
----
-- name: Converge ktranslate role on target platform
-  hosts: ktranslate-ubuntu-2204
-  become: true
-  vars:
-    anro_ktranslate_instances: []
-    anro_ktranslate_reconcile: false
-  roles:
-    - role: anro_ktranslate

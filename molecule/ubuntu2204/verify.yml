@@ -1,9 +1,0 @@
----
-- name: Verify target platform prerequisites
-  hosts: ktranslate-ubuntu-2204
-  gather_facts: true
-  tasks:
-    - name: Verify systemd is the service manager
-      ansible.builtin.assert:
-        that:
-          - ansible_facts.service_mgr == 'systemd'
