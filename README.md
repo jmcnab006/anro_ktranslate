@@ -1,4 +1,15 @@
-# v0.4.4-beta — Podman runtime migration
+# anro_ktranslate
+
+`anro_ktranslate` manages a stack of independent `ktranslate` Podman containers
+as systemd services. The role intentionally manages **container lifecycle and
+configuration delivery**, not ktranslate's application schema.
+
+That boundary keeps the role small while allowing each instance to use any
+ktranslate-supported input mode, format, sink, network mode, command-line option,
+or configuration file layout.
+
+Podman installation is handled by this role. Podman is daemonless; do not
+start or enable `podman.service` or `podman.socket` for these systemd units.
 
 **Production:** rootful Podman, supervised by systemd. **Molecule driver:** Docker.
 The role installs Podman from the managed host distribution packages before configuring systemd units.
@@ -46,18 +57,6 @@ Podman installed inside it. `molecule test -s ubuntu2404` retains the older
 full integration fixture as a separate scenario; its cross-engine network
 assumptions must be validated before treating it as a release gate.
 
-# anro_ktranslate
-
-`anro_ktranslate` manages a stack of independent `ktranslate` Podman containers
-as systemd services. The role intentionally manages **container lifecycle and
-configuration delivery**, not ktranslate's application schema.
-
-That boundary keeps the role small while allowing each instance to use any
-ktranslate-supported input mode, format, sink, network mode, command-line option,
-or configuration file layout.
-
-Podman installation is handled by this role. Podman is daemonless; do not
-start or enable `podman.service` or `podman.socket` for these systemd units.
 
 ## Design principles
 
