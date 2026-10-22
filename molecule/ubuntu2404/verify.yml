@@ -1,0 +1,71 @@
+---
+- name: SECURITY | Verify strict security enforcement
+  hosts: ktranslate-ubuntu2404
+  become: false
+  gather_facts: true
+
+  tasks:
+    - name: SECURITY | Verify strict policy rejects unsafe configuration
+      block:
+        - name: SECURITY | Apply role with unsafe configuration
+          ansible.builtin.include_role:
+            name: anro_ktranslate
+          vars:
+            anro_ktranslate_security_strict: true
+            anro_ktranslate_reconcile: false
+            anro_ktranslate_instances:
+              - name: ktranslate-insecure
+                enabled: true
+                volumes:
+                  - source: /var/run/podman.sock
+                    target: /var/run/podman.sock
+                    read_only: false
+
+        - name: SECURITY | Fail when unsafe configuration is accepted
+          ansible.builtin.fail:
+            msg: Strict security accepted an unsafe instance
+
+      rescue:
+        - name: SECURITY | Verify expected security rejection
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task is defined
+              - ansible_failed_result is defined
+              - ansible_failed_result.msg is defined
+              - ansible_failed_task.name == 'VALIDATE EFFECTIVE INSTANCE | Enforce opt-in container security policy'
+              - ansible_failed_result.assertion is defined
+              - "'@sha256:' in ansible_failed_result.assertion"
+              - ansible_failed_result.evaluated_to is defined
+              - not (ansible_failed_result.evaluated_to | bool)
+              - "'Strict security requires a digest-pinned image' in ansible_failed_result.msg"
+            fail_msg: >-
+              The role failed for an unexpected reason:
+              {{ ansible_failed_result.msg | default('Unknown failure') }}
+
+- name: LIFECYCLE | Verify generated discovery units
+  hosts: ktranslate-ubuntu2404
+  become: true
+  gather_facts: false
+  tasks:
+    - name: LIFECYCLE | Read discovery service
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/ktranslate-lifecycle-test.service
+      register: anro_ktranslate_test_service
+
+    - name: LIFECYCLE | Read discovery timer
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/ktranslate-lifecycle-test.timer
+      register: anro_ktranslate_test_timer
+
+    - name: LIFECYCLE | Assert finite execution and schedule
+      ansible.builtin.assert:
+        that:
+          - "'Type=oneshot' in (anro_ktranslate_test_service.content | b64decode)"
+          - "'Restart=no' in (anro_ktranslate_test_service.content | b64decode)"
+          - "'discovery-run.sh' in (anro_ktranslate_test_service.content | b64decode)"
+          - "'OnBootSec=3min' in (anro_ktranslate_test_timer.content | b64decode)"
+          - "'OnUnitInactiveSec=2h' in (anro_ktranslate_test_timer.content | b64decode)"
+
+# Verification runs after idempotence, so transition tests can safely mutate
+# the fixture without invalidating Molecule's convergence idempotence check.
+- ansible.builtin.import_playbook: verify_lifecycle.yml

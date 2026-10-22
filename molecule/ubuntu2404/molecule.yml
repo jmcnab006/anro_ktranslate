@@ -1,0 +1,44 @@
+---
+dependency:
+  name: galaxy
+
+driver:
+  name: docker
+
+platforms:
+  - name: ktranslate-ubuntu2404
+    image: "geerlingguy/docker-ubuntu2404-ansible:latest"
+    # Preserve the existing image, command, volumes, and other settings.
+    user: root
+    override_command: false
+    pre_build_image: true
+    privileged: true
+    cgroupns_mode: host
+    command: "/lib/systemd/systemd"
+    env:
+      container: docker
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    tmpfs:
+      - /run
+      - /tmp
+
+provisioner:
+  name: ansible
+  inventory:
+    host_vars:
+      ktranslate-ubuntu2404:
+        ansible_user: root
+        ansible_become: false
+        ansible_python_interpreter: /usr/bin/python3
+
+verifier:
+  name: ansible
+
+ansible:
+  cfg:
+    defaults:
+      deprecation_warnings: false
+      callbacks_enabled: profile_tasks
+      pipelining: true
+      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/..

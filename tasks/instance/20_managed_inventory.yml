@@ -46,7 +46,9 @@
   loop: "{{ anro_ktranslate_existing_managed_files.files }}"
   loop_control:
     label: "{{ item.path }}"
-  when: (item.path | basename) not in anro_ktranslate_desired_managed_file_names
+  when:
+    - (item.path | basename) not in anro_ktranslate_desired_managed_file_names
+    - (item.path | basename) != 'discovery-run.sh'
   register: anro_ktranslate_obsolete_managed_files
 
 # Render only files owned by Ansible. reload=restart preserves the traditional

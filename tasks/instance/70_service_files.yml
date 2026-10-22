@@ -24,3 +24,52 @@
 # Determine whether any managed file explicitly requires a restart. Registered
 # loop results retain the original file definition under item, allowing restart
 # and signal semantics to coexist within one instance.
+
+# Finite discovery uses the same Podman invocation as persistent services.
+- name: INSTANCE | Render bounded discovery launcher
+  ansible.builtin.template:
+    src: ktranslate-discovery.sh.j2
+    dest: "{{ anro_ktranslate_current_config_dir }}/discovery-run.sh"
+    owner: root
+    group: root
+    mode: "0750"
+  register: anro_ktranslate_discovery_launcher
+  when: (anro_ktranslate_instance.lifecycle.mode | default('persistent')) in ['oneshot', 'timer']
+
+- name: INSTANCE | Remove obsolete discovery launcher
+  ansible.builtin.file:
+    path: "{{ anro_ktranslate_current_config_dir }}/discovery-run.sh"
+    state: absent
+  when: (anro_ktranslate_instance.lifecycle.mode | default('persistent')) == 'persistent'
+
+- name: INSTANCE | Render scheduled discovery timer
+  ansible.builtin.template:
+    src: ktranslate.timer.j2
+    dest: "{{ anro_ktranslate_systemd_dir }}/{{ anro_ktranslate_instance.name }}.timer"
+    owner: root
+    group: root
+    mode: "0644"
+  register: anro_ktranslate_timer_template
+  when: (anro_ktranslate_instance.lifecycle.mode | default('persistent')) == 'timer'
+
+- name: INSTANCE | Check for obsolete discovery timer
+  ansible.builtin.stat:
+    path: "{{ anro_ktranslate_systemd_dir }}/{{ anro_ktranslate_instance.name }}.timer"
+  register: anro_ktranslate_old_timer_stat
+  when: (anro_ktranslate_instance.lifecycle.mode | default('persistent')) != 'timer'
+
+- name: INSTANCE | Stop obsolete discovery timer
+  ansible.builtin.systemd_service:
+    name: "{{ anro_ktranslate_instance.name }}.timer"
+    enabled: false
+    state: stopped
+  when:
+    - (anro_ktranslate_instance.lifecycle.mode | default('persistent')) != 'timer'
+    - anro_ktranslate_old_timer_stat.stat.exists | default(false)
+
+- name: INSTANCE | Remove obsolete discovery timer unit
+  ansible.builtin.file:
+    path: "{{ anro_ktranslate_systemd_dir }}/{{ anro_ktranslate_instance.name }}.timer"
+    state: absent
+  register: anro_ktranslate_removed_timer
+  when: (anro_ktranslate_instance.lifecycle.mode | default('persistent')) != 'timer'

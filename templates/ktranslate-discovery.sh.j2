@@ -1,0 +1,30 @@
+#!/bin/bash
+set -euo pipefail
+
+# Discovery-on-start remains a daemon in upstream ktranslate. Bound the run by
+# observing its completion log AND a newly written, nonempty output file.
+name={{ anro_ktranslate_instance.name | quote }}
+output={{ (anro_ktranslate_current_config_dir ~ '/runtime/' ~ (anro_ktranslate_instance.ktranslate_args.snmp_out_file | basename)) | quote }}
+marker='Discovery SNMP reloading:'
+limit={{ anro_ktranslate_instance.lifecycle.timeout_start_sec | default(1800) | int }}
+previous=$(stat -c '%Y:%s' "$output" 2>/dev/null || true)
+cleanup() {
+  {{ anro_ktranslate_podman_binary | quote }} stop --time={{ anro_ktranslate_instance.stop_timeout | default(anro_ktranslate_default_stop_timeout) }} "$name" >/dev/null 2>&1 || true
+  {{ anro_ktranslate_podman_binary | quote }} rm --force "$name" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+{{ anro_ktranslate_podman_binary }} run --detach --rm --name {{ anro_ktranslate_instance.name }} --pull={{ anro_ktranslate_instance.pull_policy | default(anro_ktranslate_default_pull_policy) }} --network {{ anro_ktranslate_instance.network | default(anro_ktranslate_default_network) }} --env-file={{ anro_ktranslate_environment_dir }}/{{ anro_ktranslate_instance.name }}.env{% if (anro_ktranslate_instance.network | default(anro_ktranslate_default_network)) != 'host' %}{% for port in anro_ktranslate_instance.ports | default([]) %} --publish={{ port }}{% endfor %}{% endif %}{% if (anro_ktranslate_instance.discovery_output | default(false) | bool) or (anro_ktranslate_instance.runtime_output | default(false) | bool) %} --mount={{ ('type=bind,source=' ~ anro_ktranslate_current_config_dir ~ '/runtime,target=/etc/ktranslate/runtime') | to_json }}{% endif %}{% for file in anro_ktranslate_instance.files | default([]) %}{% if (file.source | default('managed')) in ['managed', 'url'] %}{% set mount_source = anro_ktranslate_current_config_dir ~ '/' ~ file.name %}{% else %}{% set mount_source = file.host_path %}{% endif %} --mount={{ ('type=bind,source=' ~ mount_source ~ ',target=' ~ file.destination ~ (',readonly' if (file.read_only | default(true) | bool) else '')) | to_json }}{% endfor %}{% for volume in anro_ktranslate_instance.volumes | default([]) %} --mount={{ ('type=bind,source=' ~ volume.source ~ ',target=' ~ volume.target ~ (',readonly' if (volume.read_only | default(false) | bool) else '')) | to_json }}{% endfor %}{% for capability in (anro_ktranslate_required_capabilities + (anro_ktranslate_instance.cap_add | default([]))) | unique %} --cap-add={{ capability }}{% endfor %}{% for podman_arg in anro_ktranslate_instance.extra_podman_args | default([]) %} {{ podman_arg | to_json }}{% endfor %} {{ (anro_ktranslate_instance.image | default(anro_ktranslate_image)) | to_json }}{% for command_arg in anro_ktranslate_instance.command | default(anro_ktranslate_default_command) %} {{ command_arg | to_json }}{% endfor %}
+for (( elapsed=0; elapsed < limit; elapsed+=2 )); do
+  if ! {{ anro_ktranslate_podman_binary | quote }} inspect --format '{{ '{{.State.Running}}' }}' "$name" 2>/dev/null | grep -qx true; then
+    echo "Discovery container exited before confirmed completion" >&2
+    exit 1
+  fi
+  current=$(stat -c '%Y:%s' "$output" 2>/dev/null || true)
+  if [[ -n "$current" && "$current" != "$previous" && -s "$output" ]] && \
+     {{ anro_ktranslate_podman_binary | quote }} logs "$name" 2>&1 | grep -Fq "$marker"; then
+    exit 0
+  fi
+  sleep 2
+done
+echo "Discovery did not complete within ${limit}s" >&2
+exit 1

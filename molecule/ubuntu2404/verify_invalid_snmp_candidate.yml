@@ -1,0 +1,14 @@
+---
+- name: Verify invalid SNMP candidate is rejected
+  hosts: ktranslate-ubuntu-2404
+  become: true
+  vars_files:
+    - defaults/main.yaml
+    - vars/main.yaml
+  vars:
+    # A deterministic rejection tests the fail-closed staging path.
+    anro_ktranslate_snmp_validator_argv:
+      - /usr/bin/false
+    anro_ktranslate_reconcile: false
+  roles:
+    - role: anro_ktranslate

@@ -173,6 +173,7 @@ argument_specs:
           - A non-empty instance type selects the same-named profile; omitted, null, or empty type values skip profiles.
           - Mappings recursively merge; explicit scalar and list values replace inherited values.
           - ktranslate_args is merged by argument name so instances override only the CLI options they need.
+          - lifecycle can be persistent, oneshot, or timer; timer configuration merges recursively.
 
       anro_ktranslate_reconcile:
         type: bool
@@ -219,6 +220,26 @@ argument_specs:
               - Values must be strings, numbers, booleans, or null.
               - Mutually exclusive with command after defaults/type-profile normalization.
               - A null value removes the same-named argument inherited from the selected type profile.
+
+          lifecycle:
+            type: dict
+            description:
+              - persistent runs continuously; oneshot is manually triggered; timer schedules finite discovery.
+              - Finite modes require discovery_output and snmp_discovery_on_start.
+            options:
+              mode:
+                type: str
+                choices: [persistent, oneshot, timer]
+              timeout_start_sec:
+                type: int
+                description: Maximum discovery runtime in seconds.
+              timer:
+                type: dict
+                options:
+                  on_boot_sec:
+                    type: str
+                  on_unit_inactive_sec:
+                    type: str
 
           enabled:
             type: bool

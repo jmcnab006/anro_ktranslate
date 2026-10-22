@@ -1,0 +1,11 @@
+# {{ anro_ktranslate_managed_marker }}
+[Unit]
+Description=Scheduled ktranslate discovery {{ anro_ktranslate_instance.name }}
+
+[Timer]
+OnBootSec={{ anro_ktranslate_instance.lifecycle.timer.on_boot_sec | default('2min') }}
+OnUnitInactiveSec={{ anro_ktranslate_instance.lifecycle.timer.on_unit_inactive_sec | default('1h') }}
+Unit={{ anro_ktranslate_instance.name }}.service
+
+[Install]
+WantedBy=timers.target

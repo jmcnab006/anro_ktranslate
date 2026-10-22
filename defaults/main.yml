@@ -84,6 +84,8 @@ anro_ktranslate_instance_defaults: {}
 # the upstream -key=value command-line representation.
 anro_ktranslate_profiles:
   polling:
+    lifecycle:
+      mode: persistent
     ktranslate_args:
       snmp: /etc/ktranslate/snmp.yaml
       format: prometheus
@@ -91,6 +93,12 @@ anro_ktranslate_profiles:
       prom_listen: ":8082"
 
   discovery:
+    lifecycle:
+      mode: oneshot
+      timeout_start_sec: 1800
+      timer:
+        on_boot_sec: "2min"
+        on_unit_inactive_sec: "1h"
     ktranslate_args:
       snmp: /etc/ktranslate/snmp.yaml
       snmp_discovery_on_start: true
@@ -100,6 +108,8 @@ anro_ktranslate_profiles:
     discovery_output: true
 
   traps:
+    lifecycle:
+      mode: persistent
     ktranslate_args:
       snmp: /etc/ktranslate/snmp.yaml
       format: flat_json

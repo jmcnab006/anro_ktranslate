@@ -39,6 +39,20 @@
       (item.item.path | basename | regex_replace('\.service$', ''))
       not in (anro_ktranslate_instances | map(attribute='name') | list)
 
+- name: RECONCILE | Check stale discovery timers
+  ansible.builtin.stat:
+    path: "{{ anro_ktranslate_systemd_dir }}/{{ item }}.timer"
+  loop: "{{ anro_ktranslate_stale_services }}"
+  register: anro_ktranslate_stale_timer_stats
+
+- name: RECONCILE | Stop stale discovery timers when present
+  ansible.builtin.systemd_service:
+    name: "{{ item }}.timer"
+    state: stopped
+    enabled: false
+  loop: "{{ anro_ktranslate_stale_services }}"
+  when: (anro_ktranslate_stale_timer_stats.results | selectattr('item', 'equalto', item) | first).stat.exists
+
 - name: RECONCILE | Stop and disable stale services
   ansible.builtin.systemd_service:
     name: "{{ item }}.service"
@@ -90,3 +104,10 @@
   loop: "{{ anro_ktranslate_stale_services }}"
   loop_control:
     label: "{{ item }}"
+
+- name: RECONCILE | Remove stale discovery timer units
+  ansible.builtin.file:
+    path: "{{ anro_ktranslate_systemd_dir }}/{{ item }}.timer"
+    state: absent
+  loop: "{{ anro_ktranslate_stale_services }}"
+  notify: Reload systemd daemon

@@ -1,0 +1,60 @@
+[
+  {
+    "id": 1,
+    "name": "router01",
+    "display": "router01",
+    "status": {
+      "value": "active",
+      "label": "Active"
+    },
+    "device_type": {
+      "id": 1,
+      "display": "Cisco C8000V"
+    },
+    "site": {
+      "id": 1,
+      "display": "molecule"
+    },
+    "tags": [
+      {
+        "id": 1,
+        "display": "ktranslate"
+      }
+    ],
+    "primary_ip": {
+      "id": 1,
+      "display": "172.29.0.21/32",
+      "address": "172.29.0.21/32"
+    },
+    "oob_ip": null
+  },
+  {
+    "id": 2,
+    "name": "router02",
+    "display": "router02",
+    "status": {
+      "value": "active",
+      "label": "Active"
+    },
+    "device_type": {
+      "id": 1,
+      "display": "Cisco C8000V"
+    },
+    "site": {
+      "id": 1,
+      "display": "molecule"
+    },
+    "tags": [
+      {
+        "id": 1,
+        "display": "ktranslate"
+      }
+    ],
+    "primary_ip": {
+      "id": 2,
+      "display": "172.29.0.22/32",
+      "address": "172.29.0.22/32"
+    },
+    "oob_ip": null
+  }
+]

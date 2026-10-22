@@ -53,6 +53,7 @@
         or (anro_ktranslate_obsolete_managed_files.changed | default(false))
         or anro_ktranslate_environment_template.changed
         or anro_ktranslate_unit_template.changed
+        or (anro_ktranslate_discovery_launcher.changed | default(false))
       }}
 
 # A converged run leaves the container untouched. Configuration that cannot be

@@ -1,0 +1,32 @@
+---
+- name: SECURITY | Converge ktranslate role on target platform
+  hosts: ktranslate-ubuntu2404
+  become: false
+  gather_facts: true
+
+  vars:
+    anro_ktranslate_instances: []
+    anro_ktranslate_reconcile: false
+  roles:
+    - role: anro_ktranslate
+
+- name: LIFECYCLE | Render disabled discovery timer fixture
+  hosts: ktranslate-ubuntu2404
+  become: true
+  gather_facts: true
+  vars:
+    anro_ktranslate_runtime_uid: 1000
+    anro_ktranslate_runtime_gid: 1000
+    anro_ktranslate_reconcile: false
+    anro_ktranslate_instances:
+      - name: ktranslate-lifecycle-test
+        type: discovery
+        enabled: false
+        lifecycle:
+          mode: timer
+          timeout_start_sec: 120
+          timer:
+            on_boot_sec: "3min"
+            on_unit_inactive_sec: "2h"
+  roles:
+    - role: anro_ktranslate

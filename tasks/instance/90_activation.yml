@@ -1,20 +1,43 @@
 ---
 - name: INSTANCE | Activate configuration with rollback on failure
   block:
-    - name: INSTANCE | Manage service state for {{ anro_ktranslate_instance.name }}
+    # Timers own scheduled starts; a completed one-shot is not expected to
+    # leave a running container for Podman inspect.
+    - name: INSTANCE | Manage persistent service state
       ansible.builtin.systemd_service:
         name: "{{ anro_ktranslate_instance.name }}.service"
         enabled: "{{ anro_ktranslate_instance.enabled | bool }}"
-        daemon_reload: "{{ anro_ktranslate_unit_template.changed }}"
+        daemon_reload: "{{ anro_ktranslate_unit_template.changed or (anro_ktranslate_removed_timer.changed | default(false)) }}"
         state: >-
-          {{
-            'restarted'
-            if (anro_ktranslate_instance.enabled | bool and anro_ktranslate_instance_restart_required)
-            else ('started' if anro_ktranslate_instance.enabled | bool else 'stopped')
-          }}
+          {{ 'restarted' if (anro_ktranslate_instance.enabled | bool and anro_ktranslate_instance_restart_required)
+             else ('started' if anro_ktranslate_instance.enabled | bool else 'stopped') }}
+      when: (anro_ktranslate_instance.lifecycle.mode | default('persistent')) == 'persistent'
 
-    # systemd active alone is insufficient: Podman must report a running process.
-    - name: INSTANCE | Verify container is running after activation
+    - name: INSTANCE | Disable finite discovery service on lifecycle transition
+      ansible.builtin.systemd_service:
+        name: "{{ anro_ktranslate_instance.name }}.service"
+        enabled: false
+        daemon_reload: true
+      when:
+        - (anro_ktranslate_instance.lifecycle.mode | default('persistent')) != 'persistent'
+        - anro_ktranslate_unit_template.changed | bool
+
+    - name: INSTANCE | Manage scheduled discovery timer
+      ansible.builtin.systemd_service:
+        name: "{{ anro_ktranslate_instance.name }}.timer"
+        enabled: "{{ anro_ktranslate_instance.enabled | bool }}"
+        state: "{{ 'started' if anro_ktranslate_instance.enabled | bool else 'stopped' }}"
+        daemon_reload: >-
+          {{
+            anro_ktranslate_timer_template.changed | default(false)
+            or anro_ktranslate_unit_template.changed | default(false)
+          }}
+      when:
+        - (anro_ktranslate_instance.lifecycle.mode | default('persistent')) == 'timer'
+
+    # Manual one-shot jobs are intentionally not launched by every converge.
+    # Operators run them with systemctl start after deployment.
+    - name: INSTANCE | Verify persistent container is running after activation
       ansible.builtin.command:
         argv:
           - "{{ anro_ktranslate_podman_binary }}"
@@ -27,7 +50,9 @@
       until: anro_ktranslate_activation_state.rc == 0 and anro_ktranslate_activation_state.stdout | trim == 'true'
       retries: "{{ anro_ktranslate_activation_retries }}"
       delay: "{{ anro_ktranslate_activation_delay }}"
-      when: anro_ktranslate_instance.enabled | bool
+      when:
+        - anro_ktranslate_instance.enabled | bool
+        - (anro_ktranslate_instance.lifecycle.mode | default('persistent')) == 'persistent'
   rescue:
     - name: INSTANCE | Restore previous SNMP configuration after activation failure
       ansible.builtin.copy:
@@ -44,7 +69,10 @@
       ansible.builtin.systemd_service:
         name: "{{ anro_ktranslate_instance.name }}.service"
         state: restarted
-      when: anro_ktranslate_previous_snmp_stat.stat.exists and anro_ktranslate_instance.enabled | bool
+      when:
+        - anro_ktranslate_previous_snmp_stat.stat.exists
+        - anro_ktranslate_instance.enabled | bool
+        - (anro_ktranslate_instance.lifecycle.mode | default('persistent')) == 'persistent'
 
     - name: INSTANCE | Fail deployment after rollback
       ansible.builtin.fail:

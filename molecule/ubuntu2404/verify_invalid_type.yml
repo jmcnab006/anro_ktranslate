@@ -1,0 +1,10 @@
+---
+- name: Verify invalid type rejection
+  hosts: ktranslate-ubuntu-2404
+  become: true
+  gather_facts: false
+  vars_files:
+    - vars/main.yaml
+
+  roles:
+    - role: anro_ktranslate

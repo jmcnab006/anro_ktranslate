@@ -742,3 +742,40 @@ are not a substitute for a real SELinux-enforcing host or VM.
 
 Run `molecule test -s ubuntu2204` or `molecule test -s rocky9` for the
 platform smoke tests. Run `molecule test -s default` for the full integration suite.
+
+## Discovery lifecycle (Podman + systemd)
+
+Profiles and instances may declare `lifecycle.mode`: `persistent` (continuous,
+`Restart=always`), `oneshot` (manually started service), or `timer` (systemd
+scheduled one-shot). Polling and traps remain persistent; discovery defaults to
+`oneshot`. Instance lifecycle mappings merge recursively over profile defaults.
+
+```yaml
+anro_ktranslate_instances:
+  - name: ktranslate-discovery-site01
+    type: discovery
+    enabled: true
+    lifecycle:
+      mode: timer
+      timeout_start_sec: 1800
+      timer:
+        on_boot_sec: "2min"
+        on_unit_inactive_sec: "1h"
+```
+
+For manual discovery use `systemctl start ktranslate-discovery-site01.service`
+with `mode: oneshot`. In timer mode use `systemctl list-timers` to check the
+schedule. `OnUnitInactiveSec` measures the interval after the prior run ends.
+A timer never overlaps another active invocation of the same service.
+
+**Completion contract:** upstream `-snmp_discovery_on_start=true` does not exit.
+The role's finite launcher waits for `Discovery SNMP reloading:` in container
+logs and a newly written, nonempty `snmp_out_file`, then stops Podman. Failure
+or timeout fails the unit. This log/output contract must be verified against
+pinned ktranslate images before production use. The runtime output remains
+separate from the Git-managed SNMP configuration. Do not use
+`snmp_discovery_min` with finite lifecycle modes.
+
+The `default` Molecule scenario remains Rocky Linux 9. Run the additional
+Ubuntu 24.04 Docker-driver/Podman-runtime scenario using
+`molecule test -s ubuntu2404`. Existing `ubuntu2204` remains unchanged.

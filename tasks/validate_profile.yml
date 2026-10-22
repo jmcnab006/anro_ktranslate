@@ -58,3 +58,10 @@
   loop: "{{ anro_ktranslate_profile_entry.value.command | default([]) }}"
   loop_control:
     label: "{{ item }}"
+
+- name: VALIDATE PROFILE | Validate lifecycle mode for {{ anro_ktranslate_profile_entry.key }}
+  ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
+    that:
+      - (anro_ktranslate_profile_entry.value.lifecycle | default({})) is mapping
+      - (anro_ktranslate_profile_entry.value.lifecycle.mode | default('persistent')) in ['persistent', 'oneshot', 'timer']

@@ -51,6 +51,25 @@
       Invalid ktranslate instance definition for
       {{ anro_ktranslate_raw_instance.name | default('UNNAMED') }}.
 
+# Finite lifecycle is supported only for discovery with an output file.
+- name: VALIDATE INSTANCE | Validate lifecycle for {{ anro_ktranslate_raw_instance.name }}
+  ansible.builtin.assert:
+    quiet: "{{ not (anro_ktranslate_debug | bool) }}"
+    that:
+      - (anro_ktranslate_raw_instance.lifecycle | default({})) is mapping
+      - (anro_ktranslate_raw_instance.lifecycle.mode | default('persistent')) in ['persistent', 'oneshot', 'timer']
+      - >-
+        (anro_ktranslate_raw_instance.lifecycle.mode | default('persistent')) == 'persistent'
+        or (anro_ktranslate_raw_instance.discovery_output | default(false) | bool)
+      - >-
+        (anro_ktranslate_raw_instance.lifecycle.mode | default('persistent')) == 'persistent'
+        or (anro_ktranslate_raw_instance.ktranslate_args.snmp_discovery_on_start | default(false) | bool)
+      - (anro_ktranslate_raw_instance.lifecycle.timeout_start_sec | default(1800) | int) > 0
+      - (anro_ktranslate_raw_instance.lifecycle.timer | default({})) is mapping
+      - (anro_ktranslate_raw_instance.lifecycle.timer.on_boot_sec | default('2min')) is match('^[0-9]+(s|min|h|d)$')
+      - (anro_ktranslate_raw_instance.lifecycle.timer.on_unit_inactive_sec | default('1h')) is match('^[0-9]+(s|min|h|d)$')
+    fail_msg: "Invalid lifecycle for {{ anro_ktranslate_raw_instance.name }}."
+
 # discovery_output reserves a dedicated runtime directory that is bind-mounted
 # writable. Restrict the output to that namespace so runtime writes cannot overlap
 # the role's read-only configuration mounts.

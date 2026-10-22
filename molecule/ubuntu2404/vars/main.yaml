@@ -1,0 +1,157 @@
+---
+# Match the ktranslate image runtime identity used by the Molecule fixture.
+anro_ktranslate_runtime_uid: 1000
+anro_ktranslate_runtime_gid: 1000
+anro_ktranslate_molecule_config_url: http://172.29.0.20:8080/devices.yaml
+
+# Molecule overlays exercise local-only and URL+local configuration precedence.
+anro_ktranslate_molecule_snmp_base_config:
+  global:
+    poll_time_sec: 60
+    timeout_ms: 3000
+    retries: 1
+    drop_if_outside_poll: false
+    mib_profile_dir: /etc/ktranslate/profiles
+    mibs_db: /etc/ktranslate/mibs.db
+    mibs_enabled:
+      - HOST-RESOURCES-MIB
+  trap:
+    listen: "0.0.0.0:1620"
+  discovery:
+    cidrs: []
+    ports:
+      - 161
+    default_communities:
+      - public
+    add_devices: false
+    add_mibs: true
+    threads: 4
+
+# This remote YAML is merged over the role baseline by the URL-backed instance.
+anro_ktranslate_debug: false
+anro_ktranslate_molecule_devices:
+  devices:
+    router01:
+      device_name: router01
+      device_ip: 172.29.0.21
+      snmp_comm: public
+      snmp_ver: "2c"
+      poll_time_sec: 60
+      timeout_ms: 3000
+      retries: 1
+    router02:
+      device_name: router02
+      device_ip: 172.29.0.22
+      snmp_comm: public
+      snmp_ver: "2c"
+      poll_time_sec: 60
+      timeout_ms: 3000
+      retries: 1
+
+# The first service exercises a configuration supplied entirely by Ansible.
+anro_ktranslate_molecule_ansible_snmp_config: >-
+  {{
+    anro_ktranslate_molecule_snmp_base_config
+    | combine({'devices': anro_ktranslate_molecule_devices.devices}, recursive=false)
+  }}
+
+
+# Discovery uses the same SNMP simulator peers but has no polling sink. Its only
+# runtime product is raw discovery.yaml, which remains isolated from pollers.
+anro_ktranslate_molecule_discovery_snmp_config:
+  global:
+    poll_time_sec: 60
+    timeout_ms: 3000
+    retries: 1
+    # ktranslate discovery requires a MIB profile directory in the global
+    # section even when discovery is only generating raw device inventory.
+    mib_profile_dir: /etc/ktranslate/profiles
+  discovery:
+    cidrs:
+      - 172.29.0.21/32
+      - 172.29.0.22/32
+    ports:
+      - 161
+    default_communities:
+      - public
+    add_devices: true
+    add_mibs: true
+    threads: 4
+
+# Trap verification uses a minimal SNMP configuration. The file sink is supplied
+# by the built-in traps profile so this fixture only owns SNMP listener policy.
+anro_ktranslate_molecule_trap_snmp_config:
+  global:
+    poll_time_sec: 60
+    timeout_ms: 3000
+    retries: 1
+    mib_profile_dir: /etc/ktranslate/profiles
+  trap:
+    listen: "0.0.0.0:1620"
+
+anro_ktranslate_instances:
+  - name: ktranslate-polling-ansible
+    type: polling
+    enabled: true
+    network: ktranslate-molecule
+    ports:
+      - "0.0.0.0:18082:8082/tcp"
+    config: "{{ anro_ktranslate_molecule_ansible_snmp_config }}"
+    reload: signal
+    reload_signal: USR2
+
+  # The second service owns the same global policy in Ansible but obtains only
+  # device membership from the external HTTP fixture.
+  - name: ktranslate-polling-url
+    type: polling
+    enabled: true
+    network: ktranslate-molecule
+    ports:
+      - "0.0.0.0:18083:8082/tcp"
+    url: "{{ anro_ktranslate_molecule_config_url }}"
+    config:
+      global:
+        poll_time_sec: 30
+    reload: signal
+    reload_signal: USR2
+
+  # Discovery is intentionally output-only: no sink or Prometheus listener is
+  # configured, and the generated discovery.yaml is never consumed by pollers.
+  - name: ktranslate-discovery-molecule
+    type: discovery
+    enabled: true
+    network: ktranslate-molecule
+    config: "{{ anro_ktranslate_molecule_discovery_snmp_config }}"
+
+  # The trap instance exposes only its UDP listener. Its built-in file sink writes
+  # runtime evidence that verify.yml checks for the deterministic test varbind.
+  - name: ktranslate-traps-molecule
+    type: traps
+    enabled: true
+    network: ktranslate-molecule
+    ports:
+      - "127.0.0.1:11620:1620/udp"
+    config: "{{ anro_ktranslate_molecule_trap_snmp_config }}"
+
+  # No URL or config intentionally exercises the role-owned baseline snmp.yaml.
+  - name: ktranslate-baseline-molecule
+    enabled: false
+
+  # No type is intentional: this validates the global -> instance normalization
+  # path without selecting any reusable profile defaults.
+  - name: ktranslate-untyped-molecule
+    enabled: false
+    command:
+      - "-format=prometheus"
+      - "-sinks=prometheus"
+      - "-prom_listen=:8082"
+
+
+  # Explicit null follows the same no-profile path as an omitted type.
+  - name: ktranslate-null-type-molecule
+    type: null
+    enabled: false
+    command:
+      - "-format=prometheus"
+      - "-sinks=prometheus"
+      - "-prom_listen=:8082"
