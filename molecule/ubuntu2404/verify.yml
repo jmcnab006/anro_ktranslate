@@ -47,6 +47,14 @@
   become: true
   gather_facts: false
   tasks:
+    - name: LIFECYCLE | Validate rendered discovery launcher Bash syntax
+      ansible.builtin.command:
+        argv:
+          - /bin/bash
+          - -n
+          - /etc/ktranslate/ktranslate-lifecycle-test/discovery-run.sh
+      changed_when: false
+
     - name: LIFECYCLE | Read discovery service
       ansible.builtin.slurp:
         src: /etc/systemd/system/ktranslate-lifecycle-test.service

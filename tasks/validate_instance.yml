@@ -64,6 +64,7 @@
       - >-
         (anro_ktranslate_raw_instance.lifecycle.mode | default('persistent')) == 'persistent'
         or (anro_ktranslate_raw_instance.ktranslate_args.snmp_discovery_on_start | default(false) | bool)
+      - (anro_ktranslate_raw_instance.lifecycle.run_on_deploy | default(false)) is boolean
       - (anro_ktranslate_raw_instance.lifecycle.timeout_start_sec | default(1800) | int) > 0
       - (anro_ktranslate_raw_instance.lifecycle.timer | default({})) is mapping
       - (anro_ktranslate_raw_instance.lifecycle.timer.on_boot_sec | default('2min')) is match('^[0-9]+(s|min|h|d)$')

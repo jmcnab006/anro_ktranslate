@@ -65,3 +65,4 @@
     that:
       - (anro_ktranslate_profile_entry.value.lifecycle | default({})) is mapping
       - (anro_ktranslate_profile_entry.value.lifecycle.mode | default('persistent')) in ['persistent', 'oneshot', 'timer']
+      - (anro_ktranslate_profile_entry.value.lifecycle.run_on_deploy | default(false)) is boolean

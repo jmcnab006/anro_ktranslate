@@ -1,0 +1,116 @@
+---
+# Run after Molecule's idempotence stage. Exercise lifecycle transitions without
+# starting a real SNMP discovery job against external infrastructure.
+- name: LIFECYCLE | Verify timer deployment and activation
+  hosts: ktranslate-ubuntu2404
+  become: true
+  gather_facts: false
+  tasks:
+    - name: LIFECYCLE | Inspect installed timer
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - ktranslate-lifecycle-test.timer
+          - --property=LoadState,UnitFileState,ActiveState
+      register: anro_ktranslate_timer_state
+      changed_when: false
+
+    - name: LIFECYCLE | Verify disabled timer fixture remains inactive
+      ansible.builtin.assert:
+        that:
+          - "'LoadState=loaded' in anro_ktranslate_timer_state.stdout"
+          - "'ActiveState=inactive' in anro_ktranslate_timer_state.stdout"
+          - "'UnitFileState=disabled' in anro_ktranslate_timer_state.stdout"
+
+    - name: LIFECYCLE | Inspect generated launcher permissions
+      ansible.builtin.stat:
+        path: /etc/ktranslate/ktranslate-lifecycle-test/discovery-run.sh
+      register: anro_ktranslate_launcher_stat
+
+    - name: LIFECYCLE | Verify executable discovery launcher
+      ansible.builtin.assert:
+        that:
+          - anro_ktranslate_launcher_stat.stat.isreg
+          - anro_ktranslate_launcher_stat.stat.mode == '0750'
+
+- name: LIFECYCLE | Switch scheduled discovery to manual oneshot
+  hosts: ktranslate-ubuntu2404
+  become: true
+  gather_facts: true
+  vars:
+    anro_ktranslate_runtime_uid: 1000
+    anro_ktranslate_runtime_gid: 1000
+    anro_ktranslate_reconcile: false
+    anro_ktranslate_instances:
+      - name: ktranslate-lifecycle-test
+        type: discovery
+        enabled: false
+        lifecycle:
+          mode: oneshot
+          timeout_start_sec: 120
+  roles:
+    - role: anro_ktranslate
+
+- name: LIFECYCLE | Verify oneshot transition removed timer
+  hosts: ktranslate-ubuntu2404
+  become: true
+  gather_facts: false
+  tasks:
+    - name: LIFECYCLE | Inspect obsolete timer unit
+      ansible.builtin.stat:
+        path: /etc/systemd/system/ktranslate-lifecycle-test.timer
+      register: anro_ktranslate_obsolete_timer
+
+    - name: LIFECYCLE | Read oneshot service unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/ktranslate-lifecycle-test.service
+      register: anro_ktranslate_oneshot_unit
+
+    - name: LIFECYCLE | Verify manual oneshot unit
+      ansible.builtin.assert:
+        that:
+          - not anro_ktranslate_obsolete_timer.stat.exists
+          - "'Type=oneshot' in (anro_ktranslate_oneshot_unit.content | b64decode)"
+          - "'Restart=no' in (anro_ktranslate_oneshot_unit.content | b64decode)"
+          - "'discovery-run.sh' in (anro_ktranslate_oneshot_unit.content | b64decode)"
+
+- name: LIFECYCLE | Switch manual discovery to persistent
+  hosts: ktranslate-ubuntu2404
+  become: true
+  gather_facts: true
+  vars:
+    anro_ktranslate_runtime_uid: 1000
+    anro_ktranslate_runtime_gid: 1000
+    anro_ktranslate_reconcile: false
+    anro_ktranslate_instances:
+      - name: ktranslate-lifecycle-test
+        type: discovery
+        enabled: false
+        lifecycle:
+          mode: persistent
+  roles:
+    - role: anro_ktranslate
+
+- name: LIFECYCLE | Verify persistent transition cleanup
+  hosts: ktranslate-ubuntu2404
+  become: true
+  gather_facts: false
+  tasks:
+    - name: LIFECYCLE | Inspect removed discovery launcher
+      ansible.builtin.stat:
+        path: /etc/ktranslate/ktranslate-lifecycle-test/discovery-run.sh
+      register: anro_ktranslate_removed_launcher
+
+    - name: LIFECYCLE | Read persistent service unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/ktranslate-lifecycle-test.service
+      register: anro_ktranslate_persistent_unit
+
+    - name: LIFECYCLE | Verify persistent service and launcher cleanup
+      ansible.builtin.assert:
+        that:
+          - not anro_ktranslate_removed_launcher.stat.exists
+          - "'Type=simple' in (anro_ktranslate_persistent_unit.content | b64decode)"
+          - "'Restart=always' in (anro_ktranslate_persistent_unit.content | b64decode)"
+          - "'discovery-run.sh' not in (anro_ktranslate_persistent_unit.content | b64decode)"

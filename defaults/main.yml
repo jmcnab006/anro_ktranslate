@@ -95,6 +95,7 @@ anro_ktranslate_profiles:
   discovery:
     lifecycle:
       mode: oneshot
+      run_on_deploy: true
       timeout_start_sec: 1800
       timer:
         on_boot_sec: "2min"

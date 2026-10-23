@@ -230,6 +230,9 @@ argument_specs:
               mode:
                 type: str
                 choices: [persistent, oneshot, timer]
+              run_on_deploy:
+                type: bool
+                description: Run an enabled one-shot discovery on initial deployment and restart-bound configuration changes.
               timeout_start_sec:
                 type: int
                 description: Maximum discovery runtime in seconds.

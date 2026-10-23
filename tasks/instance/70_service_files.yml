@@ -36,6 +36,16 @@
   register: anro_ktranslate_discovery_launcher
   when: (anro_ktranslate_instance.lifecycle.mode | default('persistent')) in ['oneshot', 'timer']
 
+# Fail during deployment rather than at the first systemd activation.
+- name: INSTANCE | Validate rendered discovery launcher syntax
+  ansible.builtin.command:
+    argv:
+      - /bin/bash
+      - -n
+      - "{{ anro_ktranslate_current_config_dir }}/discovery-run.sh"
+  changed_when: false
+  when: (anro_ktranslate_instance.lifecycle.mode | default('persistent')) in ['oneshot', 'timer']
+
 - name: INSTANCE | Remove obsolete discovery launcher
   ansible.builtin.file:
     path: "{{ anro_ktranslate_current_config_dir }}/discovery-run.sh"

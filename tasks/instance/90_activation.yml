@@ -35,6 +35,46 @@
       when:
         - (anro_ktranslate_instance.lifecycle.mode | default('persistent')) == 'timer'
 
+    # A completed oneshot is inactive, so `state: started` on every converge
+    # would rerun discovery. Record a successful deployment instead.
+    - name: INSTANCE | Check successful one-shot deployment marker
+      ansible.builtin.stat:
+        path: "{{ anro_ktranslate_current_config_dir }}/.discovery-deployed"
+      register: anro_ktranslate_discovery_deployed
+      when:
+        - (anro_ktranslate_instance.lifecycle.mode | default('persistent')) == 'oneshot'
+        - anro_ktranslate_instance.lifecycle.run_on_deploy | default(false) | bool
+        - anro_ktranslate_instance.enabled | bool
+
+    - name: INSTANCE | Run one-shot discovery after deployment changes
+      ansible.builtin.systemd_service:
+        name: "{{ anro_ktranslate_instance.name }}.service"
+        state: started
+        daemon_reload: true
+      when:
+        - (anro_ktranslate_instance.lifecycle.mode | default('persistent')) == 'oneshot'
+        - anro_ktranslate_instance.lifecycle.run_on_deploy | default(false) | bool
+        - anro_ktranslate_instance.enabled | bool
+        - >-
+          not (anro_ktranslate_discovery_deployed.stat.exists | default(false))
+          or anro_ktranslate_instance_restart_required | bool
+
+    # Only commit the marker after systemd reports successful completion.
+    - name: INSTANCE | Record successful one-shot deployment
+      ansible.builtin.copy:
+        content: "deployed\n"
+        dest: "{{ anro_ktranslate_current_config_dir }}/.discovery-deployed"
+        owner: root
+        group: root
+        mode: "0644"
+      when:
+        - (anro_ktranslate_instance.lifecycle.mode | default('persistent')) == 'oneshot'
+        - anro_ktranslate_instance.lifecycle.run_on_deploy | default(false) | bool
+        - anro_ktranslate_instance.enabled | bool
+        - >-
+          not (anro_ktranslate_discovery_deployed.stat.exists | default(false))
+          or anro_ktranslate_instance_restart_required | bool
+
     # Manual one-shot jobs are intentionally not launched by every converge.
     # Operators run them with systemctl start after deployment.
     - name: INSTANCE | Verify persistent container is running after activation

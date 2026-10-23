@@ -747,7 +747,7 @@ platform smoke tests. Run `molecule test -s default` for the full integration su
 Profiles and instances may declare `lifecycle.mode`: `persistent` (continuous,
 `Restart=always`), `oneshot` (manually started service), or `timer` (systemd
 scheduled one-shot). Polling and traps remain persistent; discovery defaults to
-`oneshot`. Instance lifecycle mappings merge recursively over profile defaults.
+`oneshot` with `run_on_deploy: true`. Instance lifecycle mappings merge recursively over profile defaults.
 
 ```yaml
 anro_ktranslate_instances:
@@ -762,8 +762,11 @@ anro_ktranslate_instances:
         on_unit_inactive_sec: "1h"
 ```
 
-For manual discovery use `systemctl start ktranslate-discovery-site01.service`
-with `mode: oneshot`. In timer mode use `systemctl list-timers` to check the
+For manual discovery set `lifecycle.run_on_deploy: false` and use `systemctl start ktranslate-discovery-site01.service`
+with `mode: oneshot`. With `run_on_deploy: true`, enabled one-shot
+instances execute on first deployment and when restart-bound inputs change,
+then record successful completion; unchanged converges do not rerun discovery.
+The role fails if the generated launcher does not pass `bash -n`. In timer mode use `systemctl list-timers` to check the
 schedule. `OnUnitInactiveSec` measures the interval after the prior run ends.
 A timer never overlaps another active invocation of the same service.
 
