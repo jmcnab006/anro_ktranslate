@@ -51,6 +51,7 @@ podman_args=(
 {% endfor %}
 )
 {{ anro_ktranslate_podman_binary | quote }} "${podman_args[@]}"
+
 for (( elapsed=0; elapsed < limit; elapsed+=2 )); do
   if ! {{ anro_ktranslate_podman_binary | quote }} inspect --format '{{ '{{.State.Running}}' }}' "$name" 2>/dev/null | grep -qx true; then
     echo "Discovery container exited before confirmed completion" >&2
