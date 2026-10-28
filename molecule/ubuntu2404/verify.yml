@@ -76,4 +76,5 @@
 
 # Verification runs after idempotence, so transition tests can safely mutate
 # the fixture without invalidating Molecule's convergence idempotence check.
-- ansible.builtin.import_playbook: verify_lifecycle.yml
+- name: VERIFY | Import verify lifecycle
+  ansible.builtin.import_playbook: verify_lifecycle.yml
