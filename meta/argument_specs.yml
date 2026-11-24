@@ -229,6 +229,7 @@ argument_specs:
             description:
               - persistent runs continuously; oneshot is manually triggered; timer schedules finite discovery.
               - Finite modes require discovery_output and snmp_discovery_on_start.
+              - A timer activates the finite service on its configured schedule.
             options:
               mode:
                 type: str
@@ -251,7 +252,8 @@ argument_specs:
             type: bool
             default: true
             description:
-              - Whether the systemd service is enabled and running.
+              - Whether the persistent service or scheduled timer is enabled and running.
+              - An enabled one-shot service may be inactive after successful completion.
 
           image:
             type: str

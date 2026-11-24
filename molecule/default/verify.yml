@@ -44,3 +44,6 @@
 
 - name: TRAPS | Verify shared integration fixtures
   ansible.builtin.import_playbook: ../shared/verify_traps.yml
+
+- name: FUNCTIONAL | Import verify integration playbook
+  ansible.builtin.import_playbook: verify_functional.yml

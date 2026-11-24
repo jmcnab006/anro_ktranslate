@@ -38,8 +38,12 @@ ExecStart={% include 'ktranslate.run.j2' %}
 ExecStart={{ anro_ktranslate_config_dir }}/{{ anro_ktranslate_instance.name }}/discovery-run.sh
 {% endif %}
 
-ExecStop={{ anro_ktranslate_podman_binary }} stop --time={{ anro_ktranslate_instance.stop_timeout | default(anro_ktranslate_default_stop_timeout) }} {{ anro_ktranslate_instance.name }}
-ExecStopPost=-{{ anro_ktranslate_podman_binary }} rm --force {{ anro_ktranslate_instance.name }}
+{% if (anro_ktranslate_instance.lifecycle.mode | default('persistent')) == 'persistent' %}
+# Finite discovery launchers already stop their containers on exit.
+ExecStop={{ anro_ktranslate_podman_binary }} stop --ignore --time={{ anro_ktranslate_instance.stop_timeout | default(anro_ktranslate_default_stop_timeout) }} {{ anro_ktranslate_instance.name }}
+{% endif %}
+# Fallback cleanup must tolerate containers removed by Podman --rm.
+ExecStopPost={{ anro_ktranslate_podman_binary }} rm --force --ignore {{ anro_ktranslate_instance.name }}
 
 [Install]
 {% if (anro_ktranslate_instance.lifecycle.mode | default("persistent")) != "timer" %}

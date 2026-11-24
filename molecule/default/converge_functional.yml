@@ -1,0 +1,59 @@
+---
+- name: FUNCTIONAL | Deploy polling and discovery workloads
+  hosts: ktranslate-rocky9
+  become: true
+  gather_facts: true
+  vars:
+    anro_ktranslate_runtime_uid: 1000
+    anro_ktranslate_runtime_gid: 1000
+    # Trap receivers are converged separately; do not remove them here.
+    anro_ktranslate_reconcile: false
+    anro_ktranslate_image: >-
+      {{ lookup('ansible.builtin.env', 'ANRO_KTRANSLATE_TEST_IMAGE')
+         | default('docker.io/kentik/ktranslate:latest', true) }}
+    anro_ktranslate_instances:
+      - name: ktranslate-polling-ansible
+        type: polling
+        enabled: true
+        ports: ['0.0.0.0:18082:8082/tcp']
+        config: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/files/devices.yaml') | from_yaml }}"
+      - name: ktranslate-polling-url
+        type: polling
+        enabled: true
+        ports: ['0.0.0.0:18083:8082/tcp']
+        url: http://172.29.0.20:8080/devices.yaml
+        config:
+          global:
+            poll_time_sec: 30
+      - name: ktranslate-discovery-molecule
+        type: discovery
+        enabled: true
+        lifecycle:
+          timeout_start_sec: 180
+        config:
+          discovery:
+            cidrs: [172.29.0.21/32, 172.29.0.22/32]
+            ports: [161]
+            default_communities: [public]
+            add_devices: true
+            add_mibs: true
+            threads: 4
+      - name: ktranslate-discovery-timer
+        type: discovery
+        enabled: true
+        lifecycle:
+          mode: timer
+          timeout_start_sec: 180
+          timer:
+            on_boot_sec: "1h"
+            on_unit_inactive_sec: "1h"
+        config:
+          discovery:
+            cidrs: [172.29.0.21/32, 172.29.0.22/32]
+            ports: [161]
+            default_communities: [public]
+            add_devices: true
+            add_mibs: true
+            threads: 4
+  roles:
+    - role: anro_ktranslate

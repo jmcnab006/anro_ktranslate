@@ -82,41 +82,67 @@
       changed_when: false
       failed_when: anro_ktranslate_test_discovery_container.rc != 1
 
+    # Start the scheduled service explicitly instead of waiting an hour for its timer.
+    - name: DISCOVERY | Verify scheduled timer is active
+      ansible.builtin.command:
+        argv: [systemctl, is-active, ktranslate-discovery-timer.timer]
+      changed_when: false
+
+    - name: DISCOVERY | Exercise scheduled service
+      ansible.builtin.systemd_service:
+        name: ktranslate-discovery-timer.service
+        state: started
+
+    - name: DISCOVERY | Read scheduled discovery inventory
+      ansible.builtin.slurp:
+        src: /etc/ktranslate/ktranslate-discovery-timer/runtime/discovery.yaml
+      register: anro_ktranslate_test_timer_output
+
+    - name: DISCOVERY | Assert scheduled discovery found both peers
+      ansible.builtin.assert:
+        that:
+          - anro_ktranslate_test_timer_ips | sort == ['172.29.0.21', '172.29.0.22']
+      vars:
+        anro_ktranslate_test_timer_config: "{{ anro_ktranslate_test_timer_output.content | b64decode | from_yaml }}"
+        anro_ktranslate_test_timer_ips: "{{ anro_ktranslate_test_timer_config.devices.values() | map(attribute='device_ip') | list }}"
+
 - name: FUNCTIONAL | Verify controller-visible polling endpoints
-  hosts: localhost
-  connection: local
+  hosts: ktranslate-rocky9
   become: false
   gather_facts: false
   tasks:
-    - name: FIXTURES | Inspect sibling Docker containers
-      community.docker.docker_container_info:
-        name: "{{ item }}"
-      loop:
-        - snmp-router01
-        - snmp-router02
-        - ktranslate-fixture-http
-      register: anro_ktranslate_test_docker_peers
+    - name: FIXTURES | Verify controller resources
+      delegate_to: localhost
+      block:
+        - name: FIXTURES | Inspect sibling Docker containers
+          community.docker.docker_container_info:
+            name: "{{ item }}"
+          loop:
+            - snmp-router01
+            - snmp-router02
+            - ktranslate-fixture-http
+          register: anro_ktranslate_test_docker_peers
 
-    - name: FIXTURES | Assert peers are running on the outer network
-      ansible.builtin.assert:
-        that:
-          - item.exists
-          - item.container.State.Running
-          - "'ktranslate-molecule' in item.container.NetworkSettings.Networks"
-      loop: "{{ anro_ktranslate_test_docker_peers.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+        - name: FIXTURES | Assert peers are running on the outer network
+          ansible.builtin.assert:
+            that:
+              - item.exists
+              - item.container.State.Running
+              - "'ktranslate-molecule' in item.container.NetworkSettings.Networks"
+          loop: "{{ anro_ktranslate_test_docker_peers.results }}"
+          loop_control:
+            label: "{{ item.item }}"
 
-    - name: POLLING | Scrape published endpoints from controller
-      ansible.builtin.uri:
-        url: "http://127.0.0.1:{{ item }}/metrics"
-        return_content: true
-        use_proxy: false
-      loop: [18082, 18083]
-      register: anro_ktranslate_test_outer_scrape
-      until: >-
-        anro_ktranslate_test_outer_scrape.status | default(0) == 200 and
-        'router01' in (anro_ktranslate_test_outer_scrape.content | default('')) and
-        'router02' in (anro_ktranslate_test_outer_scrape.content | default(''))
-      retries: 30
-      delay: 2
+        - name: POLLING | Scrape published endpoints from controller
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ item }}/metrics"
+            return_content: true
+            use_proxy: false
+          loop: [18082, 18083]
+          register: anro_ktranslate_test_outer_scrape
+          until: >-
+            anro_ktranslate_test_outer_scrape.status | default(0) == 200 and
+            'router01' in (anro_ktranslate_test_outer_scrape.content | default('')) and
+            'router02' in (anro_ktranslate_test_outer_scrape.content | default(''))
+          retries: 30
+          delay: 2
