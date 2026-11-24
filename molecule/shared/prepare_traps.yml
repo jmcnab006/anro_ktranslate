@@ -1,0 +1,10 @@
+---
+- name: TRAPS | Install test sender
+  hosts: all
+  become: true
+  gather_facts: true
+  tasks:
+    - name: TRAPS | Install Net-SNMP utilities
+      ansible.builtin.package:
+        name: "{{ 'snmp' if ansible_facts.os_family == 'Debian' else 'net-snmp-utils' }}"
+        state: present

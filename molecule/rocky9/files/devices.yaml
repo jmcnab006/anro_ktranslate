@@ -1,0 +1,20 @@
+---
+devices:
+  router01:
+    device_name: router01
+    device_ip: 172.29.0.21
+    snmp_comm: public
+    snmp_ver: "2c"
+    poll_time_sec: 30
+    timeout_ms: 3000
+    retries: 1
+    mib_profile: base.yml
+  router02:
+    device_name: router02
+    device_ip: 172.29.0.22
+    snmp_comm: public
+    snmp_ver: "2c"
+    poll_time_sec: 30
+    timeout_ms: 3000
+    retries: 1
+    mib_profile: base.yml

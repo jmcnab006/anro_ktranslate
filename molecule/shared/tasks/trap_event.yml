@@ -1,0 +1,54 @@
+- name: TRAPS | Wait for application UDP socket
+  ansible.builtin.command:
+    argv:
+      - podman
+      - exec
+      - "{{ anro_ktranslate_test_trap_file }}"
+      - cat
+      - /proc/net/udp
+      - /proc/net/udp6
+  register: anro_ktranslate_test_trap_socket
+  changed_when: false
+  until: >-
+    anro_ktranslate_test_trap_socket.rc == 0 and
+    '00000000:0654' in anro_ktranslate_test_trap_socket.stdout
+  retries: 30
+  delay: 2
+
+- name: TRAPS | Generate fresh event marker
+  ansible.builtin.set_fact:
+    anro_ktranslate_test_trap_marker: "molecule-trap-{{ now(utc=true, fmt='%Y%m%d%H%M%S%f') }}"
+
+- name: TRAPS | Send real SNMPv2c notification through published UDP port
+  ansible.builtin.command:
+    argv:
+      - snmptrap
+      - -v
+      - 2c
+      - -c
+      - public
+      - 127.0.0.1:11621
+      - ""
+      - .1.3.6.1.6.3.1.1.5.3
+      - .1.3.6.1.2.1.1.5.0
+      - s
+      - "{{ anro_ktranslate_test_trap_marker }}"
+  changed_when: true
+
+# Search only application output, not diagnostic logs or old test events.
+- name: TRAPS | Wait for unique payload in file sink
+  ansible.builtin.command:
+    argv:
+      - grep
+      - --recursive
+      - --fixed-strings
+      - --files-with-matches
+      - --
+      - "{{ anro_ktranslate_test_trap_marker }}"
+      - "{{ anro_ktranslate_test_trap_runtime }}"
+  register: anro_ktranslate_test_trap_output
+  changed_when: false
+  failed_when: anro_ktranslate_test_trap_output.rc not in [0, 1]
+  until: anro_ktranslate_test_trap_output.rc == 0
+  retries: 30
+  delay: 2

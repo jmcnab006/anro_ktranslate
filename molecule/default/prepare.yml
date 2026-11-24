@@ -7,3 +7,6 @@
   tasks:
     - name: PREPARE | Verify Ansible connectivity
       ansible.builtin.ping:
+
+- name: TRAPS | Prepare shared integration dependencies
+  ansible.builtin.import_playbook: ../shared/prepare_traps.yml

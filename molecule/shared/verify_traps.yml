@@ -1,0 +1,146 @@
+---
+- name: TRAPS | Verify listener and sink behavior
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    anro_ktranslate_test_trap_file: ktranslate-traps-file-molecule
+    anro_ktranslate_test_trap_runtime: /etc/ktranslate/ktranslate-traps-file-molecule/runtime
+  tasks:
+    - name: TRAPS | Check persistent service state
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ item }}.service"
+      loop:
+        - ktranslate-traps-molecule
+        - ktranslate-traps-file-molecule
+      changed_when: false
+
+    - name: TRAPS | Read rendered trap configuration
+      ansible.builtin.slurp:
+        src: "/etc/ktranslate/{{ item }}/snmp.yaml"
+      loop:
+        - ktranslate-traps-molecule
+        - ktranslate-traps-file-molecule
+      register: anro_ktranslate_test_trap_configs
+
+    - name: TRAPS | Assert dedicated listener configuration
+      ansible.builtin.assert:
+        that:
+          - anro_ktranslate_test_trap_config.trap.listen == '0.0.0.0:1620'
+          - anro_ktranslate_test_trap_config.trap.trap_only | bool
+          - not (anro_ktranslate_test_trap_config.trap.drop_undefined | bool)
+          - anro_ktranslate_test_trap_config.devices | length == 0
+      vars:
+        anro_ktranslate_test_trap_config: "{{ item.content | b64decode | from_yaml }}"
+      loop: "{{ anro_ktranslate_test_trap_configs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: TRAPS | Inspect published ports
+      ansible.builtin.command:
+        argv:
+          - podman
+          - port
+          - "{{ item.name }}"
+          - "{{ item.port }}"
+      loop:
+        - {name: ktranslate-traps-molecule, port: 1620/udp, expected: '0.0.0.0:162'}
+        - {name: ktranslate-traps-molecule, port: 8083/tcp, expected: '127.0.0.1:8083'}
+        - {name: ktranslate-traps-file-molecule, port: 1620/udp, expected: '127.0.0.1:11621'}
+      register: anro_ktranslate_test_trap_ports
+      changed_when: false
+      failed_when: >-
+        anro_ktranslate_test_trap_ports.rc != 0 or
+        item.expected not in anro_ktranslate_test_trap_ports.stdout_lines
+
+    - name: TRAPS | Wait for Prometheus scrape readiness
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8083/metrics
+        return_content: true
+        use_proxy: false
+      register: anro_ktranslate_test_trap_scrape
+      until: anro_ktranslate_test_trap_scrape.status | default(0) == 200
+      retries: 30
+      delay: 2
+
+    - name: TRAPS | Verify both containers are running
+      ansible.builtin.command:
+        argv:
+          - podman
+          - inspect
+          - --format
+          - "{{ '{{.State.Running}}' }}"
+          - "{{ item }}"
+      loop:
+        - ktranslate-traps-molecule
+        - ktranslate-traps-file-molecule
+      register: anro_ktranslate_test_trap_state
+      changed_when: false
+      failed_when: anro_ktranslate_test_trap_state.stdout | trim != 'true'
+
+    - name: TRAPS | Check Prometheus receiver UDP socket
+      ansible.builtin.command:
+        argv:
+          - podman
+          - exec
+          - ktranslate-traps-molecule
+          - cat
+          - /proc/net/udp
+          - /proc/net/udp6
+      register: anro_ktranslate_test_trap_socket
+      changed_when: false
+      until: >-
+        anro_ktranslate_test_trap_socket.rc == 0 and
+        '00000000:0654' in anro_ktranslate_test_trap_socket.stdout
+      retries: 30
+      delay: 2
+
+    - name: TRAPS | Inject notification into default Prometheus receiver
+      ansible.builtin.command:
+        argv:
+          - snmptrap
+          - -v
+          - 2c
+          - -c
+          - public
+          - 127.0.0.1:162
+          - ""
+          - .1.3.6.1.6.3.1.1.5.3
+          - .1.3.6.1.2.1.1.5.0
+          - s
+          - molecule-prometheus-probe
+      changed_when: true
+
+    # This assertion documents the known upstream limitation rather than
+    # falsely claiming that the Prometheus sink exports the event. If a future
+    # image implements trap metrics, replace it with a metric-value assertion.
+    - name: TRAPS | Verify default receiver processes the trap event
+      ansible.builtin.command:
+        argv:
+          - podman
+          - logs
+          - ktranslate-traps-molecule
+      register: anro_ktranslate_test_prom_logs
+      changed_when: false
+      until: >-
+        anro_ktranslate_test_prom_logs.rc == 0 and
+        ((anro_ktranslate_test_prom_logs.stdout ~ anro_ktranslate_test_prom_logs.stderr)
+         is search('(?i)Invalid EventType:[^\n]*trap'))
+      retries: 30
+      delay: 2
+
+    # The formatter does not currently support raw trap events; never treat
+    # an HTTP response or generic Go metrics as proof of event delivery.
+    - name: TRAPS | Verify file sink before restart
+      ansible.builtin.include_tasks: tasks/trap_event.yml
+
+    - name: TRAPS | Restart file receiver to verify recovery
+      ansible.builtin.systemd_service:
+        name: "{{ anro_ktranslate_test_trap_file }}.service"
+        state: restarted
+
+    - name: TRAPS | Verify new file sink event after restart
+      ansible.builtin.include_tasks: tasks/trap_event.yml

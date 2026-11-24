@@ -111,17 +111,27 @@ anro_ktranslate_profiles:
   traps:
     lifecycle:
       mode: persistent
+    # Publish the standard trap port without privileged binding inside the container.
+    ports:
+      - "0.0.0.0:162:1620/udp"
+      - "127.0.0.1:8083:8083/tcp"
+    # Listener changes require a new process; device-only signal reload is
+    # not a reliable way to rebind the trap socket.
+    reload: restart
+    config:
+      trap:
+        listen: "0.0.0.0:1620"
+        transport: udp
+        version: v2c
+        trap_only: true
+        drop_undefined: false
     ktranslate_args:
       snmp: /etc/ktranslate/snmp.yaml
-      format: flat_json
-      sinks: file
-      file_out: /etc/ktranslate/runtime
-      file_on: true
-      file_flush_sec: 1
-    # Trap events are written to the file sink in an isolated writable runtime
-    # directory. Production deployments can override the sink arguments without
-    # changing the trap listener profile.
-    runtime_output: true
+      format: prometheus
+      sinks: prometheus
+      # Keep trap and polling endpoints independent, including host networking.
+      prom_listen: ":8083"
+    runtime_output: false
 
 # Remove role-managed units, containers, configuration directories, and
 # environment files when their instance names disappear from inventory.
