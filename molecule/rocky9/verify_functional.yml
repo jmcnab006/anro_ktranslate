@@ -1,0 +1,122 @@
+---
+- name: FUNCTIONAL | Verify polling and discovery results
+  hosts: ktranslate-rocky9
+  become: true
+  gather_facts: false
+  tasks:
+    - name: POLLING | Verify persistent poller services
+      ansible.builtin.command:
+        argv: [systemctl, is-active, '{{ item }}.service']
+      loop: [ktranslate-polling-ansible, ktranslate-polling-url]
+      changed_when: false
+
+    - name: POLLING | Read effective poller configuration
+      ansible.builtin.slurp:
+        src: "/etc/ktranslate/{{ item }}/snmp.yaml"
+      loop: [ktranslate-polling-ansible, ktranslate-polling-url]
+      register: anro_ktranslate_test_poll_configs
+
+    - name: POLLING | Assert both configured devices and URL overlay
+      ansible.builtin.assert:
+        that:
+          - anro_ktranslate_test_poll_config.devices.keys() | list | sort == ['router01', 'router02']
+          - anro_ktranslate_test_poll_config.devices.router01.device_ip == '172.29.0.21'
+          - anro_ktranslate_test_poll_config.devices.router02.device_ip == '172.29.0.22'
+          - item.item != 'ktranslate-polling-url' or anro_ktranslate_test_poll_config.global.poll_time_sec == 30
+      vars:
+        anro_ktranslate_test_poll_config: "{{ item.content | b64decode | from_yaml }}"
+      loop: "{{ anro_ktranslate_test_poll_configs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # Require actual device-labelled samples, not merely a healthy HTTP server.
+    - name: POLLING | Wait for both devices in each Prometheus endpoint
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ item }}/metrics"
+        return_content: true
+        use_proxy: false
+      loop: [18082, 18083]
+      register: anro_ktranslate_test_poll_scrape
+      until: >-
+        anro_ktranslate_test_poll_scrape.status | default(0) == 200 and
+        (anro_ktranslate_test_poll_scrape.content | default('') | regex_search('(?m)^[^#\\n]+router01[^\\n]*[ ]+[0-9]')) is not none and
+        (anro_ktranslate_test_poll_scrape.content | default('') | regex_search('(?m)^[^#\\n]+router02[^\\n]*[ ]+[0-9]')) is not none
+      retries: 60
+      delay: 3
+
+    - name: DISCOVERY | Read generated device inventory
+      ansible.builtin.slurp:
+        src: /etc/ktranslate/ktranslate-discovery-molecule/runtime/discovery.yaml
+      register: anro_ktranslate_test_discovery
+
+    - name: DISCOVERY | Assert both simulated devices were discovered
+      ansible.builtin.assert:
+        that:
+          - anro_ktranslate_test_discovered_ips | sort == ['172.29.0.21', '172.29.0.22']
+      vars:
+        anro_ktranslate_test_discovered_config: "{{ anro_ktranslate_test_discovery.content | b64decode | from_yaml }}"
+        anro_ktranslate_test_discovered_ips: >-
+          {{ anro_ktranslate_test_discovered_config.devices.values() | map(attribute='device_ip') | list }}
+
+    - name: DISCOVERY | Inspect completed one-shot service
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - ktranslate-discovery-molecule.service
+          - --property=ActiveState,Result,ExecMainStatus
+      register: anro_ktranslate_test_discovery_service
+      changed_when: false
+
+    - name: DISCOVERY | Assert successful finite execution
+      ansible.builtin.assert:
+        that:
+          - "'ActiveState=inactive' in anro_ktranslate_test_discovery_service.stdout_lines"
+          - "'Result=success' in anro_ktranslate_test_discovery_service.stdout_lines"
+          - "'ExecMainStatus=0' in anro_ktranslate_test_discovery_service.stdout_lines"
+
+    - name: DISCOVERY | Verify completed container was removed
+      ansible.builtin.command:
+        argv: [podman, container, exists, ktranslate-discovery-molecule]
+      register: anro_ktranslate_test_discovery_container
+      changed_when: false
+      failed_when: anro_ktranslate_test_discovery_container.rc != 1
+
+- name: FUNCTIONAL | Verify controller-visible polling endpoints
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  tasks:
+    - name: FIXTURES | Inspect sibling Docker containers
+      community.docker.docker_container_info:
+        name: "{{ item }}"
+      loop:
+        - snmp-router01
+        - snmp-router02
+        - ktranslate-fixture-http
+      register: anro_ktranslate_test_docker_peers
+
+    - name: FIXTURES | Assert peers are running on the outer network
+      ansible.builtin.assert:
+        that:
+          - item.exists
+          - item.container.State.Running
+          - "'ktranslate-molecule' in item.container.NetworkSettings.Networks"
+      loop: "{{ anro_ktranslate_test_docker_peers.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: POLLING | Scrape published endpoints from controller
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ item }}/metrics"
+        return_content: true
+        use_proxy: false
+      loop: [18082, 18083]
+      register: anro_ktranslate_test_outer_scrape
+      until: >-
+        anro_ktranslate_test_outer_scrape.status | default(0) == 200 and
+        'router01' in (anro_ktranslate_test_outer_scrape.content | default('')) and
+        'router02' in (anro_ktranslate_test_outer_scrape.content | default(''))
+      retries: 30
+      delay: 2

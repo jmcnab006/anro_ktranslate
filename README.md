@@ -129,24 +129,40 @@ anro_ktranslate_profiles:
     discovery_output: true
 
   traps:
+    lifecycle:
+      mode: persistent
+    # Publish the standard trap port without privileged binding inside the container.
+    ports:
+      - "0.0.0.0:162:1620/udp"
+      - "127.0.0.1:8083:8083/tcp"
+    # Listener changes require a new process; device-only signal reload is
+    # not a reliable way to rebind the trap socket.
+    reload: restart
+    config:
+      trap:
+        listen: "0.0.0.0:1620"
+        transport: udp
+        version: v2c
+        trap_only: true
+        drop_undefined: false
     ktranslate_args:
       snmp: /etc/ktranslate/snmp.yaml
-      snmp_trap: ":1620"
-      format: flat_json
-      sinks: file
-      file_out: /etc/ktranslate/runtime
-      file_on: true
-      file_flush_sec: 1
-    runtime_output: true
+      format: prometheus
+      sinks: prometheus
+      # Keep trap and polling endpoints independent, including host networking.
+      prom_listen: ":8083"
+    runtime_output: false
 ```
 
-The role standardizes on `traps` for the workload/type-profile name. The built-in
-profile listens on UDP 1620 and writes flat JSON to the file sink under the
-per-instance writable `/etc/ktranslate/runtime` mount. `file_on=true` enables the
-sink immediately instead of requiring `SIGUSR1`. Sink arguments remain normal
-`ktranslate_args` and can be overridden for production. The listener port is not
-published automatically; host exposure is deployment-specific and belongs in the
-instance `ports` list.
+The `traps` profile is a persistent trap-only receiver on UDP 1620 with a
+Prometheus endpoint on TCP 8083 (polling uses 8082). Configuration changes
+restart the service to rebind the socket. By default, bridge networking publishes
+UDP 162 on all IPv4 host interfaces and TCP 8083 on host loopback. Explicit
+`ports` lists replace these defaults. Other profiles do not inherit these mappings.
+Prometheus does not necessarily convert trap events into metric samples: the
+upstream formatter inspected for this change does not handle trap events.
+Use an event sink to retain payloads; a successful scrape is not evidence of
+trap delivery.
 
 ### Polling instance
 
@@ -189,24 +205,65 @@ preserves that runtime file but never renders it or promotes it into a polling
 instance. Sanitization, approval, and publication of discovered inventory are
 intentionally outside this role.
 
-### Trap instance with file output
-
-The built-in `traps` profile is usable without a separate telemetry backend. It
-keeps generated files isolated from Ansible-managed configuration:
+### Trap instance with Prometheus output
 
 ```yaml
 anro_ktranslate_instances:
   - name: ktranslate-traps-site-001
     type: traps
     ports:
-      - "0.0.0.0:1620:1620/udp"
-    config: "{{ site_trap_snmp_config }}"
+      - "0.0.0.0:162:1620/udp"
+      - "127.0.0.1:8083:8083/tcp"
 ```
 
-The host-side output is retained under
-`/etc/ktranslate/ktranslate-traps-site-001/runtime/`. The file sink is intended as
-a directly observable trap-receipt path and can be replaced by overriding the
-profile's keyed sink arguments when downstream trap processing is introduced.
+The explicit `ports` list above is optional because it matches the profile defaults.
+The standard host UDP port 162 requires sufficient host privileges and must not
+already be occupied. The role uses system-level Podman services; no additional
+container capability is needed for this port mapping. Restrict
+trap ingress using firewall policy. SNMPv2c community matching is not a reliable
+access-control boundary in upstream ktranslate. Use SNMPv3 where appropriate.
+For host networking, explicitly set `ports: []` and override
+`config.trap.listen` to `0.0.0.0:162`; the process must have permission to bind
+that privileged port. Host networking also exposes the Prometheus listener
+directly; restrict access with firewall policy. Multiple trap instances on one
+host must use distinct host addresses or ports.
+For combined polling and traps, add `config.trap` to a polling instance, set
+`trap_only: false`, publish UDP explicitly and use `reload: restart`.
+
+```bash
+curl -fsS http://127.0.0.1:8083/metrics
+snmptrap -v 2c -c public 127.0.0.1:162 '' \
+  .1.3.6.1.6.3.1.1.5.3 .1.3.6.1.2.1.1.5.0 s manual-trap-test
+```
+
+### Trap instance with file output
+
+Existing file-sink deployments must explicitly retain their sink settings after
+upgrading. Set runtime UID/GID to the actual image identity before using this
+configuration. File output needs a retention policy.
+
+```yaml
+anro_ktranslate_instances:
+  - name: ktranslate-traps-file
+    type: traps
+    ports:
+      - "127.0.0.1:11621:1620/udp"
+    runtime_output: true
+    ktranslate_args:
+      format: flat_json
+      sinks: file
+      prom_listen: null
+      file_out: /etc/ktranslate/runtime
+      file_on: true
+      file_flush_sec: 1
+```
+
+Inspect `/etc/ktranslate/ktranslate-traps-file/runtime/` for exported events.
+Alternatively use `format: flat_json`, `sinks: stdout`, `prom_listen: null`
+and inspect the service journal. OTLP (`format: otel`, `sinks: otel`,
+`otel.protocol: grpc`, `otel.endpoint: http://alloy:4317/`, `prom_listen: null`)
+is an event-oriented alternative; validate the image and configure trusted TLS
+for remote production receivers. Alloy configuration is outside this role.
 
 ### Override or remove inherited arguments
 
@@ -669,7 +726,8 @@ molecule --version
 ansible --version
 ````
 
-The legacy full integration Molecule scenario runs Ubuntu 24.04 with a real nested Podman daemon.
+The legacy integration fixtures describe the following coverage (not all are
+currently deployed by the active scenarios).
 It verifies:
 
 - systemd -> Podman lifecycle;
@@ -684,16 +742,60 @@ It verifies:
 - type-selected polling profile defaults and keyed CLI argument merging;
 - SIGUSR2 reload of changed device inventory without replacing either polling container.
 
-The nested workload image is also Ubuntu 24.04 so the lifecycle test does not
-hide behavior behind a mock Podman CLI.
-
-Run:
+The active `default`, `rocky9`, and `ubuntu2404` scenarios share trap convergence
+and verification. They deploy independent Prometheus and JSON file receivers,
+check the inherited UDP 162 and TCP 8083 host mappings, inspect rendered
+configuration, send real SNMPv2c
+notifications and verify unique payloads in the file sink before and after a
+service restart. The Prometheus receiver is checked for HTTP scrape readiness,
+and the upstream unsupported-event warning after trap injection, not for
+unsupported trap event conversion. Existing security and Ubuntu
+lifecycle checks are retained. Molecule idempotence runs before verification.
 
 ```bash
 ansible-lint
-ansible-playbook --syntax-check molecule/default/converge.yml
-molecule test
+molecule test -s default
+molecule test -s rocky9
+molecule test -s ubuntu2404
 ```
+
+The `rocky9` scenario additionally deploys two SNMP simulator containers and a
+local HTTP inventory container as sibling Docker containers on the controller
+network `ktranslate-molecule` (172.29.0.0/24). The Rocky host joins this
+network; its systemd-managed KTranslate containers use the separate default
+Podman bridge and route to the Docker peers through the Rocky host.
+The controller requires the `community.docker` collection and a local Docker
+daemon. The dedicated network name and subnet must be free before first use.
+Molecule cleanup removes the three peers and their dedicated network.
+It reuses the existing router recordings, with additional interface counters,
+and serves only the two simulated devices (no external device addresses).
+Two persistent pollers exercise local and URL-backed configuration; a one-shot
+discovery instance scans only the simulator addresses and exits after writing
+its inventory. Verification requires device-labelled Prometheus samples from
+both pollers and both discovered IP addresses in the generated YAML.
+
+After `molecule converge -s rocky9`, the Docker driver publishes the polling
+endpoints to the controller loopback:
+
+```bash
+curl -fsS http://127.0.0.1:18082/metrics
+curl -fsS http://127.0.0.1:18083/metrics
+molecule login -s rocky9
+podman ps -a
+```
+
+Inside the managed host, the trap endpoint remains on `127.0.0.1:8083`,
+with UDP 162 and the separate file receiver on UDP 11621. Discovery is expected
+not to appear in `podman ps` after completion. Recreate the Rocky scenario
+(`molecule destroy -s rocky9` followed by `molecule converge -s rocky9`) to
+apply changed outer Docker port mappings or reset supporting fixtures. The
+controller ports 18082 and 18083 must be free. Nested Podman requires working
+kernel NAT/bridge support. Supporting images are test-only and currently use
+mutable tags; pin them when a validated image set is available.
+
+Set `ANRO_KTRANSLATE_TEST_IMAGE` to a known working digest for reproducible
+integration runs; otherwise the role default image is used. SNMPv3 credential
+and OTLP integration coverage requires an image-specific follow-up.
 
 ## Runtime ownership and guarded SNMP activation
 
@@ -733,14 +835,13 @@ Do not put secrets in `extra_podman_args` or other systemd command arguments.
 
 The role expects a running Podman Engine and systemd, provisioned separately.
 Ubuntu 22.04 and 24.04 and Rocky Linux 9 are the intended deployment targets.
-The legacy full integration Molecule scenario targets Ubuntu 24.04; additional
-platform smoke scenarios validate role convergence on Ubuntu 22.04 and Rocky 9.
+Active trap integration scenarios target Rocky 9 and Ubuntu 24.04.
 Rocky deployments must verify bind-mount SELinux labels on an enforcing host;
 never disable SELinux to make a mount work. Nested Podman Molecule containers
 are not a substitute for a real SELinux-enforcing host or VM.
 
-Run `molecule test -s ubuntu2204` or `molecule test -s rocky9` for the
-platform smoke tests. Run `molecule test -s default` for the full integration suite.
+Run `molecule test -s default`, `molecule test -s rocky9`, or
+`molecule test -s ubuntu2404` for trap integration coverage.
 
 ## Discovery lifecycle (Podman + systemd)
 

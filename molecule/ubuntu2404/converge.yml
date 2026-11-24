@@ -30,3 +30,6 @@
             on_unit_inactive_sec: "2h"
   roles:
     - role: anro_ktranslate
+
+- name: TRAPS | Deploy shared integration fixtures
+  ansible.builtin.import_playbook: ../shared/converge_traps.yml

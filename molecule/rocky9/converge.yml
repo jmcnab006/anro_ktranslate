@@ -9,3 +9,9 @@
     anro_ktranslate_reconcile: false
   roles:
     - role: anro_ktranslate
+
+- name: TRAPS | Deploy shared integration fixtures
+  ansible.builtin.import_playbook: ../shared/converge_traps.yml
+
+- name: FUNCTIONAL | Deploy polling and discovery fixtures
+  ansible.builtin.import_playbook: converge_functional.yml

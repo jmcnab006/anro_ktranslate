@@ -41,3 +41,6 @@
             fail_msg: >-
               The role failed for an unexpected reason:
               {{ ansible_failed_result.msg | default('Unknown failure') }}
+
+- name: TRAPS | Verify shared integration fixtures
+  ansible.builtin.import_playbook: ../shared/verify_traps.yml

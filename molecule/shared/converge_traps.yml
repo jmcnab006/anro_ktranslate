@@ -1,0 +1,33 @@
+---
+- name: TRAPS | Converge independent trap receivers
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    # Match the identity used by the existing integration fixtures.
+    anro_ktranslate_runtime_uid: 1000
+    anro_ktranslate_runtime_gid: 1000
+    anro_ktranslate_reconcile: false
+    anro_ktranslate_image: >-
+      {{ lookup('ansible.builtin.env', 'ANRO_KTRANSLATE_TEST_IMAGE')
+         | default('docker.io/kentik/ktranslate:latest', true) }}
+    anro_ktranslate_instances:
+      - name: ktranslate-traps-molecule
+        type: traps
+        enabled: true
+        # Inherit production port mappings to exercise the standard UDP port.
+      - name: ktranslate-traps-file-molecule
+        type: traps
+        enabled: true
+        ports:
+          - "127.0.0.1:11621:1620/udp"
+        runtime_output: true
+        ktranslate_args:
+          format: flat_json
+          sinks: file
+          prom_listen: null
+          file_out: /etc/ktranslate/runtime
+          file_on: true
+          file_flush_sec: 1
+  roles:
+    - role: anro_ktranslate

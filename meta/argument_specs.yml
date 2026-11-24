@@ -169,6 +169,9 @@ argument_specs:
         description:
           - Defines independent reusable instance defaults keyed by instance type.
           - Built-in profiles are polling, discovery, and traps.
+          - The traps profile listens on container UDP 1620 and exposes Prometheus on TCP 8083.
+          - By default it publishes host UDP 162 on all IPv4 interfaces and TCP 8083 on loopback.
+          - The traps profile disables polling and defaults to restart on SNMP configuration changes.
           - Profiles do not inherit from other profiles.
           - A non-empty instance type selects the same-named profile; omitted, null, or empty type values skip profiles.
           - Mappings recursively merge; explicit scalar and list values replace inherited values.
@@ -304,6 +307,8 @@ argument_specs:
             description:
               - Podman publish specifications such as 127.0.0.1:18082:8082/tcp.
               - Must be empty when network is host.
+              - The traps profile defaults to 0.0.0.0:162:1620/udp and 127.0.0.1:8083:8083/tcp.
+              - Explicit lists replace profile mappings; use an empty list for host networking.
 
           discovery_output:
             type: bool
@@ -325,7 +330,8 @@ argument_specs:
                 Create and bind-mount /etc/ktranslate/runtime as a dedicated
                 writable per-instance directory for application-generated output.
               - >-
-                The built-in traps profile enables this for its file sink.
+                Enable explicitly when overriding the traps profile to use a file sink.
+                The default Prometheus sink does not require writable runtime storage.
 
           url:
             type: str
@@ -338,6 +344,8 @@ argument_specs:
             default: {}
             description:
               - Optional instance-local SNMP configuration merged after URL configuration.
+              - The trap mapping controls listen, transport, version, trap_only, and drop_undefined.
+              - Set trap_only to false to permit polling on a combined receiver.
               - Merge precedence is config, then URL, then anro_ktranslate_baseline_config.
 
           reload:
@@ -348,6 +356,7 @@ argument_specs:
               - signal
             description:
               - Lifecycle action when the effective /etc/ktranslate/snmp.yaml changes.
+              - The built-in traps profile selects restart to rebind the listener.
 
           reload_signal:
             type: str
