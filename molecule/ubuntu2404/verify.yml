@@ -78,6 +78,3 @@
 # the fixture without invalidating Molecule's convergence idempotence check.
 - name: VERIFY | Import verify lifecycle
   ansible.builtin.import_playbook: verify_lifecycle.yml
-
-- name: TRAPS | Verify shared integration fixtures
-  ansible.builtin.import_playbook: ../shared/verify_traps.yml

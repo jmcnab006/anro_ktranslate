@@ -1,4 +1,8 @@
 ---
+# Recheck fixtures on every converge, including when Molecule skips prepare.
+- name: FIXTURES | Ensure controller peers are ready
+  ansible.builtin.import_playbook: prepare_fixtures.yml
+
 - name: SECURITY | Converge ktranslate role on target platform
   hosts: ktranslate-rocky9
   become: false
@@ -12,3 +16,6 @@
 
 - name: TRAPS | Deploy shared integration fixtures
   ansible.builtin.import_playbook: ../shared/converge_traps.yml
+
+- name: FUNCTIONAL | Import converge integration playbook
+  ansible.builtin.import_playbook: converge_functional.yml

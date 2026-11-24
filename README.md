@@ -726,76 +726,65 @@ molecule --version
 ansible --version
 ````
 
-The legacy integration fixtures describe the following coverage (not all are
-currently deployed by the active scenarios).
-It verifies:
+### Molecule scenario responsibilities
 
-- systemd -> Podman lifecycle;
-- bridge networking and port publishing;
-- host networking without `--publish`;
-- two independent polling services: one fully Ansible-managed and one URL-merged;
-- managed raw/YAML files;
-- baseline, URL, and instance-local SNMP configuration precedence;
-- fail-closed URL retrieval that preserves active configuration and container identity;
-- externally owned file mounts;
-- disabled instances;
-- type-selected polling profile defaults and keyed CLI argument merging;
-- SIGUSR2 reload of changed device inventory without replacing either polling container.
+- `default`: Rocky Linux 9, full functional integration and strict security.
+- `ubuntu2404`: Ubuntu 24.04 installation, security and rendered lifecycle compatibility; no simulator or trap workloads.
+- `security`: existing Ubuntu 22.04 strict-security scenario.
 
-The active `default`, `rocky9`, and `ubuntu2404` scenarios share trap convergence
-and verification. They deploy independent Prometheus and JSON file receivers,
-check the inherited UDP 162 and TCP 8083 host mappings, inspect rendered
-configuration, send real SNMPv2c
-notifications and verify unique payloads in the file sink before and after a
-service restart. The Prometheus receiver is checked for HTTP scrape readiness,
-and the upstream unsupported-event warning after trap injection, not for
-unsupported trap event conversion. Existing security and Ubuntu
-lifecycle checks are retained. Molecule idempotence runs before verification.
+The former `rocky9` scenario is consolidated into `default`. Destroy any old
+`rocky9` environment before applying this change to avoid conflicting names.
 
 ```bash
 ansible-lint
-molecule test -s default
-molecule test -s rocky9
+molecule converge
+molecule verify
+molecule test
 molecule test -s ubuntu2404
+molecule test -s security
 ```
 
-The `rocky9` scenario additionally deploys two SNMP simulator containers and a
-local HTTP inventory container as sibling Docker containers on the controller
-network `ktranslate-molecule` (172.29.0.0/24). The Rocky host joins this
-network; its systemd-managed KTranslate containers use the separate default
-Podman bridge and route to the Docker peers through the Rocky host.
-The controller requires the `community.docker` collection and a local Docker
-daemon. The dedicated network name and subnet must be free before first use.
-Molecule cleanup removes the three peers and their dedicated network.
-It reuses the existing router recordings, with additional interface counters,
-and serves only the two simulated devices (no external device addresses).
-Two persistent pollers exercise local and URL-backed configuration; a one-shot
-discovery instance scans only the simulator addresses and exits after writing
-its inventory. Verification requires device-labelled Prometheus samples from
-both pollers and both discovered IP addresses in the generated YAML.
+The Docker driver creates `ktranslate-rocky9`. Preparation delegates Docker
+fixture creation to the controller from the managed inventory host, so a
+Molecule host limit does not skip fixture creation. The sibling containers
+`snmp-router01`, `snmp-router02`, and `ktranslate-fixture-http` join the dedicated
+Docker network `ktranslate-molecule` (172.29.0.0/24). The Rocky host joins that
+network too. Convergence rechecks fixture readiness in case preparation was skipped.
+Only systemd-managed KTranslate workloads run in nested Podman,
+using its separate default bridge. Preparation checks real SNMP and HTTP responses.
+The controller needs a local Docker daemon and the `community.docker` collection
+(`ansible-galaxy collection install community.docker`).
+The network name, subnet and ports must be free. Cleanup removes the peers and
+network; do not run concurrent scenarios using the same container names.
 
-After `molecule converge -s rocky9`, the Docker driver publishes the polling
-endpoints to the controller loopback:
+Convergence deploys two pollers (local and URL-backed), a finite discovery job,
+a scheduled discovery service/timer, and independent Prometheus and JSON trap
+receivers. Verification checks actual device-labelled metrics, both discovered
+IP addresses, timer activation and its service output, and real SNMPv2c trap
+export before and after restart. The Prometheus trap formatter's unsupported-event warning is checked separately from JSON event export. Idempotence runs
+before verification. Ubuntu retains disabled lifecycle rendering and transition
+checks without contacting SNMP devices.
+
+After `molecule converge`, inspect the sibling Docker containers and the nested
+Podman services:
 
 ```bash
+docker ps
+docker exec ktranslate-rocky9 podman ps
 curl -fsS http://127.0.0.1:18082/metrics
 curl -fsS http://127.0.0.1:18083/metrics
-molecule login -s rocky9
-podman ps -a
+molecule login
 ```
 
-Inside the managed host, the trap endpoint remains on `127.0.0.1:8083`,
-with UDP 162 and the separate file receiver on UDP 11621. Discovery is expected
-not to appear in `podman ps` after completion. Recreate the Rocky scenario
-(`molecule destroy -s rocky9` followed by `molecule converge -s rocky9`) to
-apply changed outer Docker port mappings or reset supporting fixtures. The
-controller ports 18082 and 18083 must be free. Nested Podman requires working
-kernel NAT/bridge support. Supporting images are test-only and currently use
-mutable tags; pin them when a validated image set is available.
-
-Set `ANRO_KTRANSLATE_TEST_IMAGE` to a known working digest for reproducible
-integration runs; otherwise the role default image is used. SNMPv3 credential
-and OTLP integration coverage requires an image-specific follow-up.
+Inside Rocky, traps use UDP 162 and Prometheus TCP 8083 (loopback); the file
+receiver uses UDP 11621. Completed discovery containers are removed by design.
+The scheduled discovery timer is active; verification explicitly starts its
+service rather than waiting for the scheduled interval. Recreate the default
+scenario with `molecule destroy` and `molecule converge` after changing outer
+Docker port mappings. Nested Podman requires working kernel NAT/bridge support.
+Set `ANRO_KTRANSLATE_TEST_IMAGE` to a validated image digest for reproducibility.
+Supporting images remain test-only mutable tags. SNMPv3 and OTLP coverage remain
+follow-up work.
 
 ## Runtime ownership and guarded SNMP activation
 
@@ -835,13 +824,12 @@ Do not put secrets in `extra_podman_args` or other systemd command arguments.
 
 The role expects a running Podman Engine and systemd, provisioned separately.
 Ubuntu 22.04 and 24.04 and Rocky Linux 9 are the intended deployment targets.
-Active trap integration scenarios target Rocky 9 and Ubuntu 24.04.
+Active trap integration testing targets the default Rocky 9 scenario.
 Rocky deployments must verify bind-mount SELinux labels on an enforcing host;
 never disable SELinux to make a mount work. Nested Podman Molecule containers
 are not a substitute for a real SELinux-enforcing host or VM.
 
-Run `molecule test -s default`, `molecule test -s rocky9`, or
-`molecule test -s ubuntu2404` for trap integration coverage.
+Run `molecule test` for trap integration coverage.
 
 ## Discovery lifecycle (Podman + systemd)
 
@@ -881,4 +869,4 @@ separate from the Git-managed SNMP configuration. Do not use
 
 The `default` Molecule scenario remains Rocky Linux 9. Run the additional
 Ubuntu 24.04 Docker-driver/Podman-runtime scenario using
-`molecule test -s ubuntu2404`. Existing `ubuntu2204` remains unchanged.
+`molecule test -s ubuntu2404`. The `security` scenario uses Ubuntu 22.04.

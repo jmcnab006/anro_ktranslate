@@ -94,6 +94,12 @@
         - anro_ktranslate_instance.enabled | bool
         - (anro_ktranslate_instance.lifecycle.mode | default('persistent')) == 'persistent'
   rescue:
+    # A previous configuration does not imply a current rollback snapshot.
+    - name: INSTANCE | Inspect SNMP rollback snapshot
+      ansible.builtin.stat:
+        path: "{{ anro_ktranslate_current_config_dir }}/.snmp-rollback.yaml"
+      register: anro_ktranslate_snmp_rollback_stat
+
     - name: INSTANCE | Restore previous SNMP configuration after activation failure
       ansible.builtin.copy:
         src: "{{ anro_ktranslate_current_config_dir }}/.snmp-rollback.yaml"
@@ -102,7 +108,14 @@
         owner: root
         group: root
         mode: "0644"
-      when: anro_ktranslate_previous_snmp_stat.stat.exists
+      register: anro_ktranslate_snmp_rollback_restore
+      when:
+        - anro_ktranslate_previous_snmp_stat.stat.exists
+        - anro_ktranslate_snmp_rollback_stat.stat.isreg | default(false)
+        # Reject snapshots left over from a different configuration.
+        - >-
+          anro_ktranslate_snmp_rollback_stat.stat.checksum
+          == anro_ktranslate_previous_snmp_stat.stat.checksum
       no_log: true
 
     - name: INSTANCE | Restart service with restored configuration
@@ -110,7 +123,7 @@
         name: "{{ anro_ktranslate_instance.name }}.service"
         state: restarted
       when:
-        - anro_ktranslate_previous_snmp_stat.stat.exists
+        - anro_ktranslate_snmp_rollback_restore is changed
         - anro_ktranslate_instance.enabled | bool
         - (anro_ktranslate_instance.lifecycle.mode | default('persistent')) == 'persistent'
 
